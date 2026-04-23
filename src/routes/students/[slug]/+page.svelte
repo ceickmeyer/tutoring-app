@@ -477,8 +477,17 @@
 						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Email</span>
 						{#if editMode}
 							<input bind:value={draft!.email} type="email" class={inputClass} />
+						{:else if s.email}
+							<button
+								onclick={() => copy(s.email, 'student-email')}
+								class="{copied === 'student-email'
+									? 'text-ctp-green'
+									: 'text-ctp-blue hover:text-ctp-lavender'} text-sm transition-colors"
+							>
+								{copied === 'student-email' ? '✓ Copied' : s.email}
+							</button>
 						{:else}
-							<span class="text-sm text-ctp-text">{s.email || '—'}</span>
+							<span class="text-sm text-ctp-text">—</span>
 						{/if}
 					</div>
 				</div>
@@ -537,7 +546,14 @@
 										<p class="text-sm text-ctp-subtext0">{contact.phone}</p>
 									{/if}
 									{#if contact.email}
-										<p class="text-sm text-ctp-subtext0">{contact.email}</p>
+										<button
+											onclick={() => copy(contact.email, `c${i}-email`)}
+											class="{copied === `c${i}-email`
+												? 'text-ctp-green'
+												: 'text-ctp-subtext0 hover:text-ctp-blue'} text-sm transition-colors"
+										>
+											{copied === `c${i}-email` ? '✓ Copied' : contact.email}
+										</button>
 									{/if}
 								{/if}
 							</div>

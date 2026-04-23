@@ -60,3 +60,12 @@ select option {
   background-color: #363a4f;
   color: #cad3f5;
 }
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  appearance: textfield;
+}

@@ -4,14 +4,19 @@
 	let { courses }: { courses: Course[] } = $props();
 
 	// SVG canvas layout
-	const W = 680,
+	const W = 800,
 		H = 240;
 	const ML = 40,
-		MR = 16,
+		MR = 8,
 		MT = 14,
 		MB = 30;
-	const CW = W - ML - MR;
-	const CH = H - MT - MB;
+	const LABEL_GAP = 12;
+	const LABEL_W = 168;
+	const LABEL_H = 18;
+	const LABEL_PAD = 3;
+	const CW = W - ML - MR - LABEL_GAP - LABEL_W; // 572
+	const CH = H - MT - MB; // 196
+	const LABEL_X = ML + CW + LABEL_GAP; // 624
 
 	// Collect every timestamp across all courses
 	const allTimes = $derived(
@@ -64,9 +69,48 @@
 			.map((c) => {
 				const sorted = [...c.entries].sort((a, b) => a.date.localeCompare(b.date));
 				const pts: [number, number][] = sorted.map((e) => [tx(e.date), ty(e.grade)]);
-				return { id: c.id, name: c.name, color: c.color, pts, path: curvePath(pts) };
+				return {
+					id: c.id,
+					name: c.name,
+					color: c.color,
+					pts,
+					path: curvePath(pts),
+					lastGrade: sorted[sorted.length - 1].grade
+				};
 			})
 	);
+
+	// End-of-line labels with collision resolution
+	const labels = $derived.by(() => {
+		const items = lines.map((l) => ({
+			name: l.name,
+			color: l.color,
+			grade: l.lastGrade,
+			lastX: l.pts[l.pts.length - 1][0],
+			naturalY: l.pts[l.pts.length - 1][1],
+			y: l.pts[l.pts.length - 1][1] - LABEL_H / 2
+		}));
+
+		items.sort((a, b) => a.naturalY - b.naturalY);
+
+		// Forward pass: push labels down to avoid overlap
+		for (let i = 1; i < items.length; i++) {
+			const minY = items[i - 1].y + LABEL_H + LABEL_PAD;
+			if (items[i].y < minY) items[i].y = minY;
+		}
+
+		// Backward pass: clamp to chart bottom, then pull overlapping labels up
+		const maxY = MT + CH - LABEL_H;
+		for (let i = items.length - 1; i >= 0; i--) {
+			if (items[i].y > maxY) items[i].y = maxY;
+			if (i > 0) {
+				const maxPrevY = items[i].y - LABEL_H - LABEL_PAD;
+				if (items[i - 1].y > maxPrevY) items[i - 1].y = maxPrevY;
+			}
+		}
+
+		return items;
+	});
 
 	// 5 evenly-spaced X axis labels
 	const xTicks = $derived(
@@ -106,7 +150,7 @@
 		<svg viewBox="0 0 {W} {H}" class="w-full" role="img" aria-label="Grade history chart">
 			<!-- Horizontal grid lines + Y labels -->
 			{#each yLines as y}
-				<line x1={ML} y1={ty(y)} x2={W - MR} y2={ty(y)} stroke="#363a4f" stroke-width="1" />
+				<line x1={ML} y1={ty(y)} x2={ML + CW} y2={ty(y)} stroke="#363a4f" stroke-width="1" />
 				<text x={ML - 6} y={ty(y) + 4} text-anchor="end" fill="#6e738d" font-size="10">{y}</text>
 			{/each}
 
@@ -119,7 +163,7 @@
 
 			<!-- Axis borders -->
 			<line x1={ML} y1={MT} x2={ML} y2={MT + CH} stroke="#494d64" stroke-width="1" />
-			<line x1={ML} y1={MT + CH} x2={W - MR} y2={MT + CH} stroke="#494d64" stroke-width="1" />
+			<line x1={ML} y1={MT + CH} x2={ML + CW} y2={MT + CH} stroke="#494d64" stroke-width="1" />
 
 			<!-- Course lines -->
 			{#each lines as line}
@@ -144,6 +188,33 @@
 						stroke-width="2"
 					/>
 				{/each}
+			{/each}
+
+			<!-- End-of-line labels -->
+			{#each labels as lbl}
+				<line
+					x1={lbl.lastX}
+					y1={lbl.naturalY}
+					x2={LABEL_X}
+					y2={lbl.y + LABEL_H / 2}
+					stroke={lbl.color}
+					stroke-width="1"
+					stroke-dasharray="3 2"
+					opacity="0.5"
+				/>
+				<rect
+					x={LABEL_X}
+					y={lbl.y}
+					width={LABEL_W}
+					height={LABEL_H}
+					rx="3"
+					fill="#24273a"
+					stroke={lbl.color}
+					stroke-width="1.5"
+				/>
+				<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 5} fill={lbl.color} font-size="10" font-weight="500"
+					>{lbl.name} – {lbl.grade}%</text
+				>
 			{/each}
 		</svg>
 
