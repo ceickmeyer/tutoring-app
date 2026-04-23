@@ -29,8 +29,15 @@
 		return ML + ((new Date(date).getTime() - minT) / spanT) * CW;
 	}
 
+	// Y axis: top is always 100, bottom is 5 below the lowest grade, rounded to nearest 5
+	const allGrades = $derived(courses.flatMap((c) => c.entries.map((e) => e.grade)));
+	const yMin = $derived(
+		allGrades.length ? Math.max(0, Math.floor((Math.min(...allGrades) - 5) / 5) * 5) : 0
+	);
+
 	function ty(grade: number): number {
-		return MT + (1 - grade / 100) * CH;
+		const range = 100 - yMin;
+		return MT + (1 - (grade - yMin) / range) * CH;
 	}
 
 	// Catmull-Rom → cubic Bézier
@@ -84,14 +91,20 @@
 					}))
 	);
 
-	const yLines = [25, 50, 75, 100];
+	// Smart Y ticks: multiples of 5 (or 10 for wide spans) from yMin to 100
+	const yLines = $derived.by(() => {
+		const span = 100 - yMin;
+		const step = span > 40 ? 10 : 5;
+		const ticks: number[] = [];
+		for (let y = yMin; y <= 100; y += step) ticks.push(y);
+		return ticks;
+	});
 </script>
 
 {#if lines.length > 0}
 	<div class="overflow-hidden rounded-lg border border-ctp-surface1 bg-ctp-surface0">
 		<svg viewBox="0 0 {W} {H}" class="w-full" role="img" aria-label="Grade history chart">
 			<!-- Horizontal grid lines + Y labels -->
-			<text x={ML - 6} y={ty(0) + 4} text-anchor="end" fill="#6e738d" font-size="10">0</text>
 			{#each yLines as y}
 				<line x1={ML} y1={ty(y)} x2={W - MR} y2={ty(y)} stroke="#363a4f" stroke-width="1" />
 				<text x={ML - 6} y={ty(y) + 4} text-anchor="end" fill="#6e738d" font-size="10">{y}</text>

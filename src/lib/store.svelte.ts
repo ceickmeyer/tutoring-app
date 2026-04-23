@@ -122,11 +122,11 @@ class StudentStore {
 
 	private async persist() {
 		if (!this.userId) return;
-		await supabase.from('user_data').upsert({
-			user_id: this.userId,
-			students: this.list,
-			updated_at: new Date().toISOString()
-		});
+		const { error } = await supabase.from('user_data').upsert(
+			{ user_id: this.userId, students: this.list, updated_at: new Date().toISOString() },
+			{ onConflict: 'user_id' }
+		);
+		if (error) console.error('persist failed:', error.message);
 	}
 
 	add(student: Student) {
