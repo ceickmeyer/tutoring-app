@@ -230,8 +230,10 @@
 		return 'bg-ctp-green';
 	}
 
-	const inputClass = 'w-full rounded px-3 py-1.5 text-sm';
-	const miniInputClass = 'rounded px-2 py-1 text-xs';
+	const inputClass =
+		'w-full rounded border border-ctp-surface2 bg-ctp-surface1 px-3 py-1.5 text-sm text-ctp-text placeholder:text-ctp-overlay0 focus:border-ctp-blue focus:outline-none focus:ring-1 focus:ring-ctp-blue/30';
+	const miniInputClass =
+		'rounded border border-ctp-surface2 bg-ctp-surface1 px-2 py-1 text-xs text-ctp-text placeholder:text-ctp-overlay0 focus:border-ctp-blue focus:outline-none';
 </script>
 
 {#if !student}

@@ -36,19 +36,22 @@ html, body {
   color: #cad3f5;
 }
 
-/* Dark form inputs — override @tailwindcss/forms defaults */
-[type='text'], [type='number'], [type='email'], [type='tel'],
-[type='url'], [type='date'], [type='password'], textarea, select {
-  background-color: #494d64;
-  border-color: #5b6078;
-  color: #cad3f5;
+/* Dark form inputs — override @tailwindcss/forms defaults.
+   !important needed because the forms plugin wins the cascade otherwise.
+   The long :not() chain catches bare <input> elements (no type attr). */
+input:not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']):not([type='image']):not([type='reset']),
+textarea,
+select {
+  background-color: #494d64 !important;
+  border-color: #5b6078 !important;
+  color: #cad3f5 !important;
   border-radius: 0.375rem;
 }
 
-[type='text']:focus, [type='number']:focus, [type='email']:focus,
-[type='tel']:focus, [type='url']:focus, [type='date']:focus,
-[type='password']:focus, textarea:focus, select:focus {
-  border-color: #8aadf4;
+input:not([type='submit']):not([type='button']):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']):not([type='image']):not([type='reset']):focus,
+textarea:focus,
+select:focus {
+  border-color: #8aadf4 !important;
   outline: none;
   box-shadow: 0 0 0 2px rgba(138, 173, 244, 0.25);
 }
