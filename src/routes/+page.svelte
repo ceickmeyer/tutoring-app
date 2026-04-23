@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { store, uniqueSlug } from '$lib/store.svelte';
+	import { supabase } from '$lib/supabase';
 	import { STUDENT_COLORS } from '$lib/types';
 	import type { Day } from '$lib/types';
 
@@ -224,6 +225,12 @@
 				title="Pin today's students to the top"
 			>
 				{DAY_ABBR[TODAY]} first
+			</button>
+			<button
+				onclick={() => supabase.auth.signOut()}
+				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
+			>
+				Sign out
 			</button>
 			<button
 				onclick={() => (showImport = true)}
