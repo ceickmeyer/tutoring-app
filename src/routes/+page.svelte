@@ -130,6 +130,17 @@
 		return days.map((d) => DAY_ABBR[d] ?? d).join(' · ');
 	}
 
+	function exportBackup() {
+		const json = JSON.stringify(store.list, null, 2);
+		const blob = new Blob([json], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `students-backup-${new Date().toISOString().slice(0, 10)}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
 	async function copy(text: string, label: string) {
 		if (!text) return;
 		await navigator.clipboard.writeText(text);
@@ -225,6 +236,12 @@
 				title="Pin today's students to the top"
 			>
 				{DAY_ABBR[TODAY]} first
+			</button>
+			<button
+				onclick={exportBackup}
+				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
+			>
+				Export
 			</button>
 			<button
 				onclick={() => supabase.auth.signOut()}

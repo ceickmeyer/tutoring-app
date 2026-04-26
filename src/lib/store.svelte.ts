@@ -104,16 +104,16 @@ class StudentStore {
 		if (data?.students) {
 			this.list = (data.students as Record<string, unknown>[]).map(migrate);
 		} else {
-			// First login: migrate from localStorage if present, else use INITIAL
+			// First login: migrate from localStorage if present, else start empty
 			const localRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
 			if (localRaw) {
 				try {
 					this.list = (JSON.parse(localRaw) as Record<string, unknown>[]).map(migrate);
 				} catch {
-					this.list = INITIAL;
+					this.list = [];
 				}
 			} else {
-				this.list = INITIAL;
+				this.list = [];
 			}
 			await this.persist();
 		}
