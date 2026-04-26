@@ -182,6 +182,11 @@
 		editEntryGrade = 0;
 	}
 
+	function autoselect(node: HTMLInputElement) {
+		node.focus();
+		node.select();
+	}
+
 	function submitEditEntry() {
 		if (!draft || !editEntryOpen || isNaN(editEntryGrade)) return;
 		draft.courses = draft.courses.map((c) =>
@@ -732,7 +737,15 @@
 									<!-- Add entry form -->
 									{#if editEntryOpen === course.id}
 										<div class="flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-3 py-2 pl-4">
-											<input type="date" bind:value={editEntryDate} class={miniInputClass} />
+											<input
+												type="date"
+												bind:value={editEntryDate}
+												class={miniInputClass}
+												onkeydown={(e) => {
+													if (e.key === 'Enter') { e.preventDefault(); submitEditEntry(); }
+													if (e.key === 'Escape') { e.preventDefault(); editEntryOpen = null; }
+												}}
+											/>
 											<div class="flex items-center gap-1">
 												<input
 													type="number"
@@ -741,6 +754,11 @@
 													max="100"
 													step="1"
 													class="{miniInputClass} w-16 text-right"
+													use:autoselect
+													onkeydown={(e) => {
+														if (e.key === 'Enter') { e.preventDefault(); submitEditEntry(); }
+														if (e.key === 'Escape') { e.preventDefault(); editEntryOpen = null; }
+													}}
 												/>
 												<span class="text-xs text-ctp-overlay0">%</span>
 											</div>
