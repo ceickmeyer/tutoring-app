@@ -20,7 +20,7 @@
 
 	// Collect every timestamp across all courses
 	const allTimes = $derived(
-		courses.flatMap((c) => c.entries.map((e) => new Date(e.date).getTime()))
+		courses.flatMap((c) => c.entries.map((e) => new Date(e.date + 'T00:00:00').getTime()))
 	);
 
 	const minT = $derived(allTimes.length ? allTimes.reduce((a, b) => Math.min(a, b)) : 0);
@@ -31,7 +31,7 @@
 
 	function tx(date: string): number {
 		if (singleDate) return ML + CW / 2;
-		return ML + ((new Date(date).getTime() - minT) / spanT) * CW;
+		return ML + ((new Date(date + 'T00:00:00').getTime() - minT) / spanT) * CW;
 	}
 
 	// Y axis: top is always 100, bottom is 5 below the lowest grade, rounded to nearest 5

@@ -717,7 +717,7 @@
 											{#each draft!.courses[i].entries as entry, j}
 												<div class="flex items-center gap-2 text-xs text-ctp-subtext0">
 													<span
-														>{new Date(entry.date).toLocaleDateString('en-US', {
+														>{new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
 															month: 'short',
 															day: 'numeric',
 															year: 'numeric'
@@ -792,7 +792,7 @@
 											{#if course.entries.length > 0}
 												{@const last = course.entries[course.entries.length - 1]}
 												<span class="text-sm text-ctp-overlay0">
-													{last.grade}% &middot; {new Date(last.date).toLocaleDateString('en-US', {
+													{last.grade}% &middot; {new Date(last.date + 'T00:00:00').toLocaleDateString('en-US', {
 														month: 'short',
 														day: 'numeric'
 													})}
@@ -813,7 +813,15 @@
 									<!-- Inline log form -->
 									{#if activeCourseLog === course.id}
 										<div class="mt-2 flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-3 py-2">
-											<input type="date" bind:value={logDate} class={miniInputClass} />
+											<input
+												type="date"
+												bind:value={logDate}
+												class={miniInputClass}
+												onkeydown={(e) => {
+													if (e.key === 'Enter') { e.preventDefault(); submitLog(); }
+													if (e.key === 'Escape') { e.preventDefault(); activeCourseLog = null; }
+												}}
+											/>
 											<div class="flex items-center gap-1">
 												<input
 													type="number"
@@ -822,6 +830,11 @@
 													max="100"
 													step="1"
 													class="{miniInputClass} w-16 text-right"
+													use:autoselect
+													onkeydown={(e) => {
+														if (e.key === 'Enter') { e.preventDefault(); submitLog(); }
+														if (e.key === 'Escape') { e.preventDefault(); activeCourseLog = null; }
+													}}
 												/>
 												<span class="text-xs text-ctp-overlay0">%</span>
 											</div>
@@ -909,7 +922,7 @@
 									</div>
 									<div class="flex justify-between text-xs text-ctp-overlay0">
 										<span>
-											{project.startDate ? new Date(project.startDate).toLocaleDateString() : '—'}
+											{project.startDate ? new Date(project.startDate + 'T00:00:00').toLocaleDateString() : '—'}
 										</span>
 										<span>
 											{#if prog.overdue}
@@ -919,7 +932,7 @@
 											{/if}
 										</span>
 										<span>
-											{project.dueDate ? new Date(project.dueDate).toLocaleDateString() : '—'}
+											{project.dueDate ? new Date(project.dueDate + 'T00:00:00').toLocaleDateString() : '—'}
 										</span>
 									</div>
 								{/if}
