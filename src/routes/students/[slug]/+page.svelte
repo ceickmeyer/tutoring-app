@@ -41,6 +41,7 @@
 	let editMode = $state(false);
 	let draft = $state<Student | null>(null);
 	let showDeleteConfirm = $state(false);
+	let showResetGradesConfirm = $state(false);
 
 	function startEdit() {
 		if (!student) return;
@@ -67,6 +68,15 @@
 		if (!student) return;
 		store.remove(student.id);
 		goto('/');
+	}
+
+	function resetGrades() {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			courses: student.courses.map((c) => ({ ...c, entries: [] }))
+		});
+		showResetGradesConfirm = false;
 	}
 
 	// ── Clipboard ────────────────────────────────────────────────
@@ -673,11 +683,22 @@
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Grades</h2>
-					{#if editMode}
-						<button onclick={addCourse} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
-							+ Add Course
-						</button>
-					{/if}
+					<div class="flex items-center gap-3">
+						{#if !editMode && s.courses.some((c) => c.entries.length > 0)}
+							{#if showResetGradesConfirm}
+								<span class="text-xs text-ctp-overlay0">Clear all grade history?</span>
+								<button onclick={resetGrades} class="text-xs text-ctp-red hover:opacity-80">Yes, reset</button>
+								<button onclick={() => (showResetGradesConfirm = false)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+							{:else}
+								<button onclick={() => (showResetGradesConfirm = true)} class="text-xs text-ctp-overlay0 hover:text-ctp-red transition-colors">Reset grades</button>
+							{/if}
+						{/if}
+						{#if editMode}
+							<button onclick={addCourse} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
+								+ Add Course
+							</button>
+						{/if}
+					</div>
 				</div>
 
 				<!-- Chart (view mode only, needs at least one entry) -->

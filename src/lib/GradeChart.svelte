@@ -4,19 +4,19 @@
 	let { courses }: { courses: Course[] } = $props();
 
 	// SVG canvas layout
-	const W = 800,
-		H = 240;
+	const W = 820,
+		H = 300;
 	const ML = 40,
 		MR = 8,
 		MT = 14,
 		MB = 30;
 	const LABEL_GAP = 12;
-	const LABEL_W = 168;
-	const LABEL_H = 18;
-	const LABEL_PAD = 3;
-	const CW = W - ML - MR - LABEL_GAP - LABEL_W; // 572
-	const CH = H - MT - MB; // 196
-	const LABEL_X = ML + CW + LABEL_GAP; // 624
+	const LABEL_W = 180;
+	const LABEL_H = 24;
+	const LABEL_PAD = 4;
+	const CW = W - ML - MR - LABEL_GAP - LABEL_W; // 580
+	const CH = H - MT - MB; // 256
+	const LABEL_X = ML + CW + LABEL_GAP; // 632
 
 	// Collect every timestamp across all courses
 	const allTimes = $derived(
@@ -75,21 +75,27 @@
 					color: c.color,
 					pts,
 					path: curvePath(pts),
-					lastGrade: sorted[sorted.length - 1].grade
+					lastGrade: sorted[sorted.length - 1].grade,
+					prevGrade: sorted.length >= 2 ? sorted[sorted.length - 2].grade : null
 				};
 			})
 	);
 
-	// End-of-line labels with collision resolution
+	// End-of-line labels with collision resolution and trend indicators
 	const labels = $derived.by(() => {
-		const items = lines.map((l) => ({
-			name: l.name,
-			color: l.color,
-			grade: l.lastGrade,
-			lastX: l.pts[l.pts.length - 1][0],
-			naturalY: l.pts[l.pts.length - 1][1],
-			y: l.pts[l.pts.length - 1][1] - LABEL_H / 2
-		}));
+		const items = lines.map((l) => {
+			const delta = l.prevGrade !== null ? l.lastGrade - l.prevGrade : null;
+			const trend = delta === null ? '' : delta > 1 ? 'up' : delta < -1 ? 'down' : 'flat';
+			return {
+				name: l.name,
+				color: l.color,
+				grade: l.lastGrade,
+				trend,
+				lastX: l.pts[l.pts.length - 1][0],
+				naturalY: l.pts[l.pts.length - 1][1],
+				y: l.pts[l.pts.length - 1][1] - LABEL_H / 2
+			};
+		});
 
 		items.sort((a, b) => a.naturalY - b.naturalY);
 
@@ -212,9 +218,43 @@
 					stroke={lbl.color}
 					stroke-width="1.5"
 				/>
-				<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 5} fill={lbl.color} font-size="10" font-weight="500"
-					>{lbl.name} – {lbl.grade}%</text
-				>
+				<!-- Trend icon: 10×10, centered vertically in label -->
+				{#if lbl.trend}
+					<g transform="translate({LABEL_X + 5}, {lbl.y + LABEL_H / 2 - 5}) scale({10 / 24})">
+						{#if lbl.trend === 'up'}
+							<path
+								fill-rule="evenodd"
+								clip-rule="evenodd"
+								d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
+								fill={lbl.color}
+							/>
+						{:else if lbl.trend === 'down'}
+							<g transform="rotate(180, 12, 12)">
+								<path
+									fill-rule="evenodd"
+									clip-rule="evenodd"
+									d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
+									fill={lbl.color}
+								/>
+							</g>
+						{:else}
+							<path
+								d="M3 12L21 12"
+								stroke={lbl.color}
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						{/if}
+					</g>
+					<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+						>{lbl.name} – {lbl.grade}%</text
+					>
+				{:else}
+					<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+						>{lbl.name} – {lbl.grade}%</text
+					>
+				{/if}
 			{/each}
 		</svg>
 
