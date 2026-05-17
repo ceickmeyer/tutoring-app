@@ -76,6 +76,7 @@
 	let newSkillType = $state<SkillType>('status');
 	let newSkillUnit = $state('');
 	let newSkillHigher = $state(true);
+	let newSkillGoal = $state<number | null>(null);
 
 	function addSkill() {
 		if (!newSkillName.trim()) return;
@@ -86,11 +87,13 @@
 			description: newSkillDescription.trim(),
 			type: newSkillType,
 			unit: newSkillUnit.trim(),
-			higherIsBetter: newSkillHigher
+			higherIsBetter: newSkillHigher,
+			goal: newSkillGoal !== null && !isNaN(newSkillGoal) ? newSkillGoal : undefined
 		} satisfies SkillBankItem);
 		newSkillName = '';
 		newSkillDescription = '';
 		newSkillUnit = '';
+		newSkillGoal = null;
 	}
 
 	const skillCategories = $derived(
@@ -105,6 +108,7 @@
 	let editSkillType = $state<SkillType>('status');
 	let editSkillUnit = $state('');
 	let editSkillHigher = $state(true);
+	let editSkillGoal = $state<number | null>(null);
 
 	function startEditSkill(skill: SkillBankItem) {
 		editingSkillId = skill.id;
@@ -114,6 +118,7 @@
 		editSkillType = skill.type;
 		editSkillUnit = skill.unit;
 		editSkillHigher = skill.higherIsBetter;
+		editSkillGoal = skill.goal ?? null;
 	}
 
 	function saveEditSkill() {
@@ -124,7 +129,8 @@
 			description: editSkillDescription.trim(),
 			type: editSkillType,
 			unit: editSkillUnit.trim(),
-			higherIsBetter: editSkillHigher
+			higherIsBetter: editSkillHigher,
+			goal: editSkillGoal !== null && !isNaN(editSkillGoal) ? editSkillGoal : undefined
 		});
 		editingSkillId = null;
 	}
@@ -633,6 +639,11 @@
 																<input type="checkbox" bind:checked={editSkillHigher} class="rounded" />
 																Higher is better
 															</label>
+															<div class="flex items-center gap-1.5">
+																<span class="text-xs text-ctp-subtext0">Goal:</span>
+																<input type="number" bind:value={editSkillGoal} class="w-24 rounded px-2 py-0.5 text-xs" placeholder="e.g. 100" />
+																{#if editSkillUnit}<span class="text-xs text-ctp-overlay0">{editSkillUnit}</span>{/if}
+															</div>
 														{/if}
 													</div>
 													<div class="flex gap-2">
@@ -692,6 +703,11 @@
 								<input type="checkbox" bind:checked={newSkillHigher} class="rounded" />
 								Higher is better
 							</label>
+							<div class="flex items-center gap-1.5">
+								<span class="text-xs text-ctp-subtext0">Goal:</span>
+								<input type="number" bind:value={newSkillGoal} class="w-24 rounded px-2.5 py-1 text-xs" placeholder="e.g. 100" />
+								{#if newSkillUnit}<span class="text-xs text-ctp-overlay0">{newSkillUnit}</span>{/if}
+							</div>
 						{/if}
 					</div>
 					<button onclick={addSkill} class="rounded bg-ctp-blue px-3 py-1.5 text-xs font-medium text-ctp-crust hover:opacity-90 transition-opacity">+ Add to Bank</button>

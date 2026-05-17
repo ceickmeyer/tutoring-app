@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import GradeChart from '$lib/GradeChart.svelte';
+	import SkillSparkline from '$lib/SkillSparkline.svelte';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
 	import type { BigProject, Day, SkillStatus, Student } from '$lib/types';
@@ -84,6 +85,17 @@
 	let activeSkillLog = $state<string | null>(null);
 	let skillLogDate = $state(today);
 	let skillLogValue = $state<number>(0);
+	let editingSkillEntry = $state<{ skillId: string; idx: number } | null>(null);
+	let editSkillEntryDate = $state(today);
+	let editSkillEntryValue = $state<number>(0);
+	let expandedHistory = $state<Set<string>>(new Set());
+
+	function toggleHistory(skillId: string) {
+		const next = new Set(expandedHistory);
+		if (next.has(skillId)) next.delete(skillId);
+		else next.add(skillId);
+		expandedHistory = next;
+	}
 
 	const assignedSkillIds = $derived(new Set((student?.skills ?? []).map((sk) => sk.skillId)));
 	const availableSkills = $derived(store.skillBank.filter((s) => !assignedSkillIds.has(s.id)));
@@ -99,7 +111,7 @@
 		if (!student) return;
 		store.update(student.id, {
 			...student,
-			skills: [...student.skills, { skillId, status: 'not_started', entries: [], notes: '' }]
+			skills: [...student.skills, { skillId, status: 'not_started', entries: [] }]
 		});
 		showAssignSkill = false;
 	}
@@ -124,6 +136,41 @@
 		activeSkillLog = skillId;
 		skillLogDate = today;
 		skillLogValue = lastValue;
+		editingSkillEntry = null;
+	}
+
+	function deleteSkillEntry(skillId: string, idx: number) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : { ...sk, entries: sk.entries.filter((_, i) => i !== idx) }
+			)
+		});
+	}
+
+	function startEditSkillEntry(skillId: string, idx: number, date: string, value: number) {
+		editingSkillEntry = { skillId, idx };
+		editSkillEntryDate = date;
+		editSkillEntryValue = value;
+		activeSkillLog = null;
+	}
+
+	function saveSkillEntry() {
+		if (!student || !editingSkillEntry) return;
+		const { skillId, idx } = editingSkillEntry;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : {
+					...sk,
+					entries: sk.entries
+						.map((e, i) => i === idx ? { date: editSkillEntryDate, value: editSkillEntryValue } : e)
+						.sort((a, b) => a.date.localeCompare(b.date))
+				}
+			)
+		});
+		editingSkillEntry = null;
 	}
 
 	function submitSkillLog(skillId: string) {
@@ -1111,7 +1158,7 @@
 													</div>
 
 												{:else}
-													<!-- Scored: latest value + log form -->
+													<!-- Scored: sparkline + log -->
 													{@const lastEntry = sk.entries.at(-1)}
 													{@const prevEntry = sk.entries.length >= 2 ? sk.entries.at(-2) : null}
 													<div class="mt-2 flex flex-wrap items-center gap-2">
@@ -1119,47 +1166,37 @@
 															{@const delta = prevEntry ? lastEntry.value - prevEntry.value : null}
 															{@const better = delta !== null && (skillDef.higherIsBetter ? delta > 0.5 : delta < -0.5)}
 															{@const worse = delta !== null && (skillDef.higherIsBetter ? delta < -0.5 : delta > 0.5)}
-															<span class="text-base font-semibold text-ctp-text">{lastEntry.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
+															<span class="text-lg font-bold text-ctp-text">{lastEntry.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
 															{#if delta !== null}
-																<span class="text-xs {better ? 'text-ctp-green' : worse ? 'text-ctp-red' : 'text-ctp-overlay0'}">
-																	{better ? '↑' : worse ? '↓' : '–'}
-																</span>
+																<span class="text-sm {better ? 'text-ctp-green' : worse ? 'text-ctp-red' : 'text-ctp-overlay0'}">{better ? '↑' : worse ? '↓' : '–'}</span>
+															{/if}
+															{#if skillDef.goal !== undefined}
+																<span class="text-xs text-ctp-overlay0">→ goal: <span class="font-medium text-ctp-subtext1">{skillDef.goal}{skillDef.unit ? ' ' + skillDef.unit : ''}</span></span>
 															{/if}
 														{:else}
 															<span class="text-sm text-ctp-overlay0">No entries yet</span>
 														{/if}
-
 														{#if activeSkillLog !== sk.skillId}
-															<button
-																onclick={() => openSkillLog(sk.skillId, lastEntry?.value ?? 0)}
-																class="rounded bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-subtext1 hover:bg-ctp-surface2"
-															>Log</button>
+															<button onclick={() => openSkillLog(sk.skillId, lastEntry?.value ?? 0)} class="ml-auto rounded bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-subtext1 hover:bg-ctp-surface2">Log</button>
 														{/if}
 													</div>
+
+													<!-- Sparkline chart -->
+													<SkillSparkline entries={sk.entries} goal={skillDef.goal} unit={skillDef.unit} higherIsBetter={skillDef.higherIsBetter} />
 
 													<!-- Inline log form -->
 													{#if activeSkillLog === sk.skillId}
 														<div class="mt-2 flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-3 py-2">
-															<input
-																type="date"
-																bind:value={skillLogDate}
-																class={miniInputClass}
-																onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }}
-															/>
+															<input type="date" bind:value={skillLogDate} class={miniInputClass}
+																onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }} />
 															<div class="flex items-center gap-1">
-																<input
-																	type="number"
-																	bind:value={skillLogValue}
-																	class="{miniInputClass} w-20 text-right"
-																	use:autoselect
-																	onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }}
-																/>
+																<input type="number" bind:value={skillLogValue} class="{miniInputClass} w-20 text-right" use:autoselect
+																	onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }} />
 																{#if skillDef.unit}<span class="text-xs text-ctp-overlay0">{skillDef.unit}</span>{/if}
 															</div>
 															{#if sk.entries.length > 0}
 																{@const lv = sk.entries.at(-1)!.value}
-																<button
-																	onclick={() => { skillLogValue = lv; submitSkillLog(sk.skillId); }}
+																<button onclick={() => { skillLogValue = lv; submitSkillLog(sk.skillId); }}
 																	class="rounded border border-ctp-surface2 px-2 py-1 text-xs text-ctp-subtext0 hover:border-ctp-overlay0 hover:text-ctp-text transition-colors"
 																>↩ {lv}{skillDef.unit ? ' ' + skillDef.unit : ''}</button>
 															{/if}
@@ -1168,13 +1205,39 @@
 														</div>
 													{/if}
 
-													<!-- Entry history (last 5) -->
-													{#if sk.entries.length > 1}
-														<div class="mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
-															{#each sk.entries.slice(-5).reverse().slice(1) as e}
-																<span class="text-xs text-ctp-overlay0">{e.value}{skillDef.unit ? ' ' + skillDef.unit : ''} · {new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-															{/each}
-														</div>
+													<!-- Collapsible history with edit/delete -->
+													{#if sk.entries.length > 0}
+														<button onclick={() => toggleHistory(sk.skillId)} class="mt-2 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">
+															{expandedHistory.has(sk.skillId) ? '▾' : '▸'} History ({sk.entries.length})
+														</button>
+														{#if expandedHistory.has(sk.skillId)}
+															<div class="mt-1 space-y-0.5">
+																{#each [...sk.entries].reverse() as e, ri}
+																	{@const idx = sk.entries.length - 1 - ri}
+																	{#if editingSkillEntry?.skillId === sk.skillId && editingSkillEntry.idx === idx}
+																		<div class="flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-2 py-1">
+																			<input type="date" bind:value={editSkillEntryDate} class={miniInputClass}
+																				onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveSkillEntry(); } if (e.key === 'Escape') { e.preventDefault(); editingSkillEntry = null; } }} />
+																			<div class="flex items-center gap-1">
+																				<input type="number" bind:value={editSkillEntryValue} class="{miniInputClass} w-20 text-right" use:autoselect
+																					onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveSkillEntry(); } if (e.key === 'Escape') { e.preventDefault(); editingSkillEntry = null; } }} />
+																				{#if skillDef.unit}<span class="text-xs text-ctp-overlay0">{skillDef.unit}</span>{/if}
+																			</div>
+																			<button onclick={saveSkillEntry} class="rounded bg-ctp-blue px-2 py-0.5 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+																			<button onclick={() => (editingSkillEntry = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+																		</div>
+																	{:else}
+																		<div class="flex items-center gap-2 text-xs">
+																			<span class="font-medium text-ctp-subtext1">{e.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
+																			<span class="text-ctp-overlay0">·</span>
+																			<span class="text-ctp-overlay0">{new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+																			<button onclick={() => startEditSkillEntry(sk.skillId, idx, e.date, e.value)} class="text-ctp-overlay0/60 hover:text-ctp-blue transition-colors" title="Edit">✎</button>
+																			<button onclick={() => deleteSkillEntry(sk.skillId, idx)} class="text-ctp-red/40 hover:text-ctp-red transition-colors" title="Delete">✕</button>
+																		</div>
+																	{/if}
+																{/each}
+															</div>
+														{/if}
 													{/if}
 												{/if}
 

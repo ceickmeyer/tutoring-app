@@ -83,6 +83,7 @@ export interface SkillBankItem {
 	type: SkillType;
 	unit: string;            // '%', 'wpm', 'sec', 'min', 'words', '' …
 	higherIsBetter: boolean; // for scored: wpm=true, time=false
+	goal?: number;           // target value, same for all students using this skill
 }
 
 export interface SkillEntry {
