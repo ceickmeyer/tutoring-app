@@ -72,6 +72,30 @@ export const COURSE_COLORS = [
 	'#b7bdf8'  // lavender
 ];
 
+export type SkillType = 'status' | 'scored';
+export type SkillStatus = 'not_started' | 'working' | 'mastered';
+
+export interface SkillBankItem {
+	id: string;
+	name: string;
+	category: string;
+	description: string;     // shown to parents; same for every student
+	type: SkillType;
+	unit: string;            // '%', 'wpm', 'sec', 'min', 'words', '' …
+	higherIsBetter: boolean; // for scored: wpm=true, time=false
+}
+
+export interface SkillEntry {
+	date: string;  // YYYY-MM-DD
+	value: number;
+}
+
+export interface StudentSkill {
+	skillId: string;
+	status: SkillStatus;
+	entries: SkillEntry[];
+}
+
 export interface Student {
 	id: string;
 	name: string;
@@ -88,6 +112,7 @@ export interface Student {
 	projects: BigProject[];
 	extraLogins: ExtraLogin[];
 	courses: Course[];
+	skills: StudentSkill[];
 	hiatus: boolean;
 	color: string;
 }

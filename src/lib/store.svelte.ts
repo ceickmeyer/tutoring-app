@@ -1,4 +1,4 @@
-import type { Day, Student } from './types';
+import type { Day, SkillBankItem, Student } from './types';
 import { STUDENT_COLORS } from './types';
 import { supabase } from './supabase';
 
@@ -31,6 +31,7 @@ function blank(partial: Partial<Student> & Pick<Student, 'id' | 'name'>): Studen
 		projects: [],
 		extraLogins: [],
 		courses: [],
+		skills: [],
 		hiatus: false,
 		color: colorForId(partial.id),
 		...partial
@@ -80,6 +81,7 @@ function migrate(s: unknown): Student {
 	return {
 		...raw,
 		courses: raw.courses ?? [],
+		skills: raw.skills ?? [],
 		days: raw.days ?? (raw.day ? [raw.day as Day] : []),
 		hiatus: raw.hiatus ?? false,
 		color: raw.color ?? colorForId(raw.id)
@@ -88,6 +90,7 @@ function migrate(s: unknown): Student {
 
 class StudentStore {
 	list = $state<Student[]>([]);
+	skillBank = $state<SkillBankItem[]>([]);
 	loading = $state(true);
 	private userId: string | null = null;
 
@@ -102,7 +105,16 @@ class StudentStore {
 			.single();
 
 		if (data?.students) {
-			this.list = (data.students as Record<string, unknown>[]).map(migrate);
+			const raw = data.students as unknown;
+			if (Array.isArray(raw)) {
+				// Legacy format: bare array of students
+				this.list = (raw as Record<string, unknown>[]).map(migrate);
+				this.skillBank = [];
+			} else {
+				const wrapper = raw as { students: Record<string, unknown>[]; skillBank: SkillBankItem[] };
+				this.list = (wrapper.students ?? []).map(migrate);
+				this.skillBank = wrapper.skillBank ?? [];
+			}
 		} else {
 			// First login: migrate from localStorage if present, else start empty
 			const localRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -115,6 +127,7 @@ class StudentStore {
 			} else {
 				this.list = [];
 			}
+			this.skillBank = [];
 			await this.persist();
 		}
 		this.loading = false;
@@ -122,11 +135,32 @@ class StudentStore {
 
 	private async persist() {
 		if (!this.userId) return;
+		const payload = { students: $state.snapshot(this.list), skillBank: $state.snapshot(this.skillBank) };
 		const { error } = await supabase.from('user_data').upsert(
-			{ user_id: this.userId, students: this.list, updated_at: new Date().toISOString() },
+			{ user_id: this.userId, students: payload, updated_at: new Date().toISOString() },
 			{ onConflict: 'user_id' }
 		);
 		if (error) console.error('persist failed:', error.message);
+	}
+
+	addSkill(skill: SkillBankItem) {
+		this.skillBank = [...this.skillBank, skill];
+		this.persist();
+	}
+
+	updateSkill(id: string, updated: Omit<SkillBankItem, 'id'>) {
+		this.skillBank = this.skillBank.map((s) => s.id === id ? { ...s, ...updated } : s);
+		this.persist();
+	}
+
+	removeSkill(id: string) {
+		this.skillBank = this.skillBank.filter((s) => s.id !== id);
+		// Remove from every student too
+		this.list = this.list.map((s) => ({
+			...s,
+			skills: s.skills.filter((sk) => sk.skillId !== id)
+		}));
+		this.persist();
 	}
 
 	add(student: Student) {
@@ -155,6 +189,7 @@ class StudentStore {
 
 	clear() {
 		this.list = [];
+		this.skillBank = [];
 		this.userId = null;
 		this.loading = true;
 	}

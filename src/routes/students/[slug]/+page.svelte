@@ -3,7 +3,7 @@
 	import GradeChart from '$lib/GradeChart.svelte';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
-	import type { BigProject, Day, Student } from '$lib/types';
+	import type { BigProject, Day, SkillStatus, Student } from '$lib/types';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -78,6 +78,79 @@
 		});
 		showResetGradesConfirm = false;
 	}
+
+	// ── Skills ───────────────────────────────────────────────────
+	let showAssignSkill = $state(false);
+	let activeSkillLog = $state<string | null>(null);
+	let skillLogDate = $state(today);
+	let skillLogValue = $state<number>(0);
+
+	const assignedSkillIds = $derived(new Set((student?.skills ?? []).map((sk) => sk.skillId)));
+	const availableSkills = $derived(store.skillBank.filter((s) => !assignedSkillIds.has(s.id)));
+	const assignedCategories = $derived.by(() => {
+		if (!student) return [];
+		const cats = student.skills
+			.map((sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category)
+			.filter((c): c is string => !!c);
+		return [...new Set(cats)].sort();
+	});
+
+	function assignSkill(skillId: string) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			skills: [...student.skills, { skillId, status: 'not_started', entries: [], notes: '' }]
+		});
+		showAssignSkill = false;
+	}
+
+	function removeStudentSkill(skillId: string) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.filter((sk) => sk.skillId !== skillId)
+		});
+	}
+
+	function setSkillStatus(skillId: string, status: SkillStatus) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) => sk.skillId === skillId ? { ...sk, status } : sk)
+		});
+	}
+
+	function openSkillLog(skillId: string, lastValue: number) {
+		activeSkillLog = skillId;
+		skillLogDate = today;
+		skillLogValue = lastValue;
+	}
+
+	function submitSkillLog(skillId: string) {
+		if (!student || isNaN(skillLogValue)) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : {
+					...sk,
+					entries: [...sk.entries, { date: skillLogDate, value: skillLogValue }]
+						.sort((a, b) => a.date.localeCompare(b.date))
+				}
+			)
+		});
+		activeSkillLog = null;
+	}
+
+	const STATUS_LABELS: Record<SkillStatus, string> = {
+		not_started: 'Not started',
+		working: 'Working',
+		mastered: 'Mastered'
+	};
+	const STATUS_ACTIVE: Record<SkillStatus, string> = {
+		not_started: 'bg-ctp-surface2 text-ctp-subtext1',
+		working: 'bg-ctp-yellow/20 text-ctp-yellow border border-ctp-yellow/30',
+		mastered: 'bg-ctp-green/20 text-ctp-green border border-ctp-green/30'
+	};
 
 	// ── Clipboard ────────────────────────────────────────────────
 	let copied = $state<string | null>(null);
@@ -859,6 +932,16 @@
 												/>
 												<span class="text-xs text-ctp-overlay0">%</span>
 											</div>
+											{#if course.entries.length > 0}
+												{@const lastGrade = course.entries[course.entries.length - 1].grade}
+												<button
+													onclick={() => { logGradeInput = lastGrade; submitLog(); }}
+													class="rounded border border-ctp-surface2 px-2.5 py-1 text-xs text-ctp-subtext0 hover:border-ctp-overlay0 hover:text-ctp-text transition-colors"
+													title="Log same grade as last entry"
+												>
+													↩ {lastGrade}%
+												</button>
+											{/if}
 											<button
 												onclick={submitLog}
 												class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90"
@@ -957,6 +1040,151 @@
 										</span>
 									</div>
 								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
+
+			<!-- Skills -->
+			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Skills</h2>
+					{#if !editMode && store.skillBank.length > 0}
+						<div class="relative">
+							{#if showAssignSkill}
+								<div class="absolute right-0 top-6 z-10 w-56 rounded-lg border border-ctp-surface1 bg-ctp-mantle py-1 shadow-lg">
+									{#if availableSkills.length === 0}
+										<p class="px-3 py-2 text-xs text-ctp-overlay0">All skills assigned</p>
+									{:else}
+										{#each availableSkills as skill}
+											<button
+												onclick={() => assignSkill(skill.id)}
+												class="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm text-ctp-text hover:bg-ctp-surface0"
+											>
+												<span>{skill.name}</span>
+												<span class="text-xs text-ctp-overlay0">{skill.category}</span>
+											</button>
+										{/each}
+									{/if}
+									<div class="mt-1 border-t border-ctp-surface1 px-3 pt-1">
+										<button onclick={() => (showAssignSkill = false)} class="py-1 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Close</button>
+									</div>
+								</div>
+							{/if}
+							<button
+								onclick={() => (showAssignSkill = !showAssignSkill)}
+								class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender"
+							>+ Assign skill</button>
+						</div>
+					{/if}
+				</div>
+
+				{#if !student || s.skills.length === 0}
+					<p class="text-sm text-ctp-overlay0">
+						{store.skillBank.length === 0 ? 'Add skills to your Skill Bank first.' : 'No skills assigned yet.'}
+					</p>
+				{:else}
+					<div class="space-y-5">
+						{#each assignedCategories as cat}
+							<div>
+								<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+								<div class="space-y-2">
+									{#each s.skills.filter((sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category === cat) as sk}
+										{@const skillDef = store.skillBank.find((b) => b.id === sk.skillId)}
+										{#if skillDef}
+											<div class="rounded-lg border border-ctp-surface1 p-3">
+												<div class="flex items-start justify-between gap-3">
+													<span class="text-sm font-medium text-ctp-text">{skillDef.name}</span>
+													<button onclick={() => removeStudentSkill(sk.skillId)} class="shrink-0 text-xs text-ctp-red/50 hover:text-ctp-red transition-colors">✕</button>
+												</div>
+
+												{#if skillDef.type === 'status'}
+													<!-- Status toggle -->
+													<div class="mt-2 flex gap-1.5">
+														{#each ['not_started', 'working', 'mastered'] as st (st)}
+															<button
+																onclick={() => setSkillStatus(sk.skillId, st as SkillStatus)}
+																class="{sk.status === st ? STATUS_ACTIVE[st as SkillStatus] : 'bg-ctp-surface1 text-ctp-overlay0 hover:bg-ctp-surface2'} rounded px-2.5 py-1 text-xs transition-colors"
+															>{STATUS_LABELS[st as SkillStatus]}</button>
+														{/each}
+													</div>
+
+												{:else}
+													<!-- Scored: latest value + log form -->
+													{@const lastEntry = sk.entries.at(-1)}
+													{@const prevEntry = sk.entries.length >= 2 ? sk.entries.at(-2) : null}
+													<div class="mt-2 flex flex-wrap items-center gap-2">
+														{#if lastEntry}
+															{@const delta = prevEntry ? lastEntry.value - prevEntry.value : null}
+															{@const better = delta !== null && (skillDef.higherIsBetter ? delta > 0.5 : delta < -0.5)}
+															{@const worse = delta !== null && (skillDef.higherIsBetter ? delta < -0.5 : delta > 0.5)}
+															<span class="text-base font-semibold text-ctp-text">{lastEntry.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
+															{#if delta !== null}
+																<span class="text-xs {better ? 'text-ctp-green' : worse ? 'text-ctp-red' : 'text-ctp-overlay0'}">
+																	{better ? '↑' : worse ? '↓' : '–'}
+																</span>
+															{/if}
+														{:else}
+															<span class="text-sm text-ctp-overlay0">No entries yet</span>
+														{/if}
+
+														{#if activeSkillLog !== sk.skillId}
+															<button
+																onclick={() => openSkillLog(sk.skillId, lastEntry?.value ?? 0)}
+																class="rounded bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-subtext1 hover:bg-ctp-surface2"
+															>Log</button>
+														{/if}
+													</div>
+
+													<!-- Inline log form -->
+													{#if activeSkillLog === sk.skillId}
+														<div class="mt-2 flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-3 py-2">
+															<input
+																type="date"
+																bind:value={skillLogDate}
+																class={miniInputClass}
+																onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }}
+															/>
+															<div class="flex items-center gap-1">
+																<input
+																	type="number"
+																	bind:value={skillLogValue}
+																	class="{miniInputClass} w-20 text-right"
+																	use:autoselect
+																	onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSkillLog(sk.skillId); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLog = null; } }}
+																/>
+																{#if skillDef.unit}<span class="text-xs text-ctp-overlay0">{skillDef.unit}</span>{/if}
+															</div>
+															{#if sk.entries.length > 0}
+																{@const lv = sk.entries.at(-1)!.value}
+																<button
+																	onclick={() => { skillLogValue = lv; submitSkillLog(sk.skillId); }}
+																	class="rounded border border-ctp-surface2 px-2 py-1 text-xs text-ctp-subtext0 hover:border-ctp-overlay0 hover:text-ctp-text transition-colors"
+																>↩ {lv}{skillDef.unit ? ' ' + skillDef.unit : ''}</button>
+															{/if}
+															<button onclick={() => submitSkillLog(sk.skillId)} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+															<button onclick={() => (activeSkillLog = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+														</div>
+													{/if}
+
+													<!-- Entry history (last 5) -->
+													{#if sk.entries.length > 1}
+														<div class="mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+															{#each sk.entries.slice(-5).reverse().slice(1) as e}
+																<span class="text-xs text-ctp-overlay0">{e.value}{skillDef.unit ? ' ' + skillDef.unit : ''} · {new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+															{/each}
+														</div>
+													{/if}
+												{/if}
+
+											{#if skillDef.description}
+												<p class="mt-2 whitespace-pre-wrap text-xs text-ctp-subtext0">{skillDef.description}</p>
+											{/if}
+										</div>
+									{/if}
+								{/each}
+								</div>
 							</div>
 						{/each}
 					</div>

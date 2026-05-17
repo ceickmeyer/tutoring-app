@@ -2,7 +2,7 @@
 	import { store, uniqueSlug } from '$lib/store.svelte';
 	import { supabase } from '$lib/supabase';
 	import { STUDENT_COLORS } from '$lib/types';
-	import type { Day } from '$lib/types';
+	import type { Day, SkillBankItem, SkillType } from '$lib/types';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -66,7 +66,68 @@
 
 	let showAdd = $state(false);
 	let showImport = $state(false);
+	let showSkillBank = $state(false);
 	let importText = $state('');
+
+	// ── Skill bank form ──────────────────────────────────────────
+	let newSkillName = $state('');
+	let newSkillCategory = $state('');
+	let newSkillDescription = $state('');
+	let newSkillType = $state<SkillType>('status');
+	let newSkillUnit = $state('');
+	let newSkillHigher = $state(true);
+
+	function addSkill() {
+		if (!newSkillName.trim()) return;
+		store.addSkill({
+			id: crypto.randomUUID(),
+			name: newSkillName.trim(),
+			category: newSkillCategory.trim() || 'General',
+			description: newSkillDescription.trim(),
+			type: newSkillType,
+			unit: newSkillUnit.trim(),
+			higherIsBetter: newSkillHigher
+		} satisfies SkillBankItem);
+		newSkillName = '';
+		newSkillDescription = '';
+		newSkillUnit = '';
+	}
+
+	const skillCategories = $derived(
+		[...new Set(store.skillBank.map((s) => s.category))].sort()
+	);
+
+	// ── Skill bank inline edit ────────────────────────────────────
+	let editingSkillId = $state<string | null>(null);
+	let editSkillName = $state('');
+	let editSkillCategory = $state('');
+	let editSkillDescription = $state('');
+	let editSkillType = $state<SkillType>('status');
+	let editSkillUnit = $state('');
+	let editSkillHigher = $state(true);
+
+	function startEditSkill(skill: SkillBankItem) {
+		editingSkillId = skill.id;
+		editSkillName = skill.name;
+		editSkillCategory = skill.category;
+		editSkillDescription = skill.description;
+		editSkillType = skill.type;
+		editSkillUnit = skill.unit;
+		editSkillHigher = skill.higherIsBetter;
+	}
+
+	function saveEditSkill() {
+		if (!editingSkillId || !editSkillName.trim()) return;
+		store.updateSkill(editingSkillId, {
+			name: editSkillName.trim(),
+			category: editSkillCategory.trim() || 'General',
+			description: editSkillDescription.trim(),
+			type: editSkillType,
+			unit: editSkillUnit.trim(),
+			higherIsBetter: editSkillHigher
+		});
+		editingSkillId = null;
+	}
 
 	let newName = $state('');
 	let newGrade = $state(9);
@@ -236,6 +297,12 @@
 				title="Pin today's students to the top"
 			>
 				{DAY_ABBR[TODAY]} first
+			</button>
+			<button
+				onclick={() => (showSkillBank = true)}
+				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
+			>
+				Skill Bank
 			</button>
 			<button
 				onclick={exportBackup}
@@ -522,6 +589,113 @@
 				>
 					Import
 				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Skill Bank Modal -->
+{#if showSkillBank}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
+		<div class="mx-4 flex w-full max-w-lg flex-col rounded-xl bg-ctp-mantle shadow-xl" style="max-height:85vh">
+			<div class="flex items-center justify-between border-b border-ctp-surface0 px-6 py-4">
+				<h2 class="text-lg font-semibold text-ctp-text">Skill Bank</h2>
+				<button onclick={() => (showSkillBank = false)} class="text-ctp-overlay0 hover:text-ctp-subtext0">✕</button>
+			</div>
+			<div class="flex-1 overflow-y-auto px-6 py-4">
+				{#if store.skillBank.length === 0}
+					<p class="text-sm text-ctp-overlay0">No skills yet. Add one below.</p>
+				{:else}
+					<div class="space-y-4">
+						{#each skillCategories as cat}
+							<div>
+								<p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+								<div class="space-y-1">
+									{#each store.skillBank.filter((s) => s.category === cat) as skill}
+										<div class="rounded-lg bg-ctp-surface0 px-3 py-2">
+											{#if editingSkillId === skill.id}
+												<div class="space-y-2">
+													<div class="grid grid-cols-2 gap-2">
+														<input bind:value={editSkillName} class="rounded px-2.5 py-1 text-sm" placeholder="Skill name" />
+														<input bind:value={editSkillCategory} class="rounded px-2.5 py-1 text-sm" placeholder="Category" />
+													</div>
+													<textarea bind:value={editSkillDescription} rows="2" class="w-full rounded px-2.5 py-1 text-sm" placeholder="Description for parents"></textarea>
+													<div class="flex flex-wrap items-center gap-3">
+														<div class="flex items-center gap-2">
+															<span class="text-xs text-ctp-subtext0">Type:</span>
+															{#each [['status', 'Status'], ['scored', 'Scored']] as [val, label]}
+																<button onclick={() => (editSkillType = val as SkillType)} class="{editSkillType === val ? 'bg-ctp-blue text-ctp-crust' : 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2 py-0.5 text-xs font-medium transition-colors">{label}</button>
+															{/each}
+														</div>
+														{#if editSkillType === 'scored'}
+															<input bind:value={editSkillUnit} class="w-24 rounded px-2 py-0.5 text-xs" placeholder="Unit" />
+															<label class="flex items-center gap-1.5 text-xs text-ctp-subtext0 cursor-pointer">
+																<input type="checkbox" bind:checked={editSkillHigher} class="rounded" />
+																Higher is better
+															</label>
+														{/if}
+													</div>
+													<div class="flex gap-2">
+														<button onclick={saveEditSkill} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+														<button onclick={() => (editingSkillId = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+														<button onclick={() => store.removeSkill(skill.id)} class="ml-auto text-xs text-ctp-red/60 hover:text-ctp-red transition-colors">Remove skill</button>
+													</div>
+												</div>
+											{:else}
+												<div class="flex items-start justify-between">
+													<div>
+														<div class="flex items-center gap-2">
+															<span class="text-sm text-ctp-text">{skill.name}</span>
+															<span class="text-xs text-ctp-overlay0">{skill.type === 'status' ? 'Status' : skill.unit ? skill.unit + (skill.higherIsBetter ? ' ↑' : ' ↓') : 'Scored'}</span>
+														</div>
+														{#if skill.description}
+															<p class="mt-0.5 whitespace-pre-wrap text-xs text-ctp-subtext0">{skill.description}</p>
+														{/if}
+													</div>
+													<button onclick={() => startEditSkill(skill)} class="ml-3 shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">Edit</button>
+												</div>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
+			<div class="border-t border-ctp-surface0 px-6 py-4">
+				<p class="mb-3 text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">Add Skill</p>
+				<div class="space-y-2">
+					<div class="grid grid-cols-2 gap-2">
+						<input bind:value={newSkillName} class="rounded px-3 py-1.5 text-sm" placeholder="Skill name" onkeydown={(e) => e.key === 'Enter' && addSkill()} />
+						<input bind:value={newSkillCategory} class="rounded px-3 py-1.5 text-sm" placeholder="Category (e.g. Math)" onkeydown={(e) => e.key === 'Enter' && addSkill()} />
+					</div>
+					<textarea
+						bind:value={newSkillDescription}
+						rows="2"
+						class="w-full rounded px-3 py-1.5 text-sm"
+						placeholder="Description for parents (e.g. Student can recall multiplication facts 0–12 within 3 seconds)"
+					></textarea>
+					<div class="flex flex-wrap items-center gap-3">
+						<div class="flex items-center gap-2">
+							<span class="text-xs text-ctp-subtext0">Type:</span>
+							{#each [['status', 'Status'], ['scored', 'Scored']] as [val, label]}
+								<button
+									onclick={() => (newSkillType = val as SkillType)}
+									class="{newSkillType === val ? 'bg-ctp-blue text-ctp-crust' : 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2.5 py-1 text-xs font-medium transition-colors"
+								>{label}</button>
+							{/each}
+						</div>
+						{#if newSkillType === 'scored'}
+							<input bind:value={newSkillUnit} class="w-28 rounded px-2.5 py-1 text-xs" placeholder="Unit (wpm, sec…)" />
+							<label class="flex items-center gap-1.5 text-xs text-ctp-subtext0 cursor-pointer">
+								<input type="checkbox" bind:checked={newSkillHigher} class="rounded" />
+								Higher is better
+							</label>
+						{/if}
+					</div>
+					<button onclick={addSkill} class="rounded bg-ctp-blue px-3 py-1.5 text-xs font-medium text-ctp-crust hover:opacity-90 transition-opacity">+ Add to Bank</button>
+				</div>
 			</div>
 		</div>
 	</div>
