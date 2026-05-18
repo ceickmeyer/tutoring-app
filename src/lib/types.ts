@@ -72,7 +72,7 @@ export const COURSE_COLORS = [
 	'#b7bdf8'  // lavender
 ];
 
-export type SkillType = 'status' | 'scored';
+export type SkillType = 'status' | 'scored' | 'multi';
 export type SkillStatus = 'not_started' | 'working' | 'mastered';
 
 export interface SkillBankItem {
@@ -84,6 +84,7 @@ export interface SkillBankItem {
 	unit: string;            // '%', 'wpm', 'sec', 'min', 'words', '' …
 	higherIsBetter: boolean; // for scored: wpm=true, time=false
 	goal?: number;           // target value, same for all students using this skill
+	items?: string[];        // for 'multi' type: ordered sub-item names (e.g. ['2s','3s','5s'])
 }
 
 export interface SkillEntry {
@@ -95,6 +96,7 @@ export interface StudentSkill {
 	skillId: string;
 	status: SkillStatus;
 	entries: SkillEntry[];
+	itemEntries?: Record<string, SkillEntry[]>; // for 'multi' type: item name → entries
 }
 
 export interface Student {

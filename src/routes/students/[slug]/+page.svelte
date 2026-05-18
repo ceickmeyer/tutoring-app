@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import GradeChart from '$lib/GradeChart.svelte';
+	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
 	import SkillSparkline from '$lib/SkillSparkline.svelte';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
@@ -89,12 +90,95 @@
 	let editSkillEntryDate = $state(today);
 	let editSkillEntryValue = $state<number>(0);
 	let expandedHistory = $state<Set<string>>(new Set());
+	let activeSkillLogItem = $state<{ skillId: string; item: string } | null>(null);
+	let multiLogDate = $state(today);
+	let multiLogValue = $state<number>(0);
+	let editingMultiEntry = $state<{ skillId: string; item: string; idx: number } | null>(null);
+	let editMultiEntryDate = $state(today);
+	let editMultiEntryValue = $state<number>(0);
+	let expandedMultiHistory = $state<Set<string>>(new Set());
 
 	function toggleHistory(skillId: string) {
 		const next = new Set(expandedHistory);
 		if (next.has(skillId)) next.delete(skillId);
 		else next.add(skillId);
 		expandedHistory = next;
+	}
+
+	function toggleMultiHistory(skillId: string, item: string) {
+		const key = skillId + '::' + item;
+		const next = new Set(expandedMultiHistory);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		expandedMultiHistory = next;
+	}
+
+	function openMultiLog(skillId: string, item: string, lastValue: number) {
+		activeSkillLogItem = { skillId, item };
+		multiLogDate = today;
+		multiLogValue = lastValue;
+		editingMultiEntry = null;
+	}
+
+	function submitMultiLog(skillId: string, item: string) {
+		if (!student || isNaN(multiLogValue)) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : {
+					...sk,
+					itemEntries: {
+						...(sk.itemEntries ?? {}),
+						[item]: [...((sk.itemEntries ?? {})[item] ?? []), { date: multiLogDate, value: multiLogValue }]
+							.sort((a, b) => a.date.localeCompare(b.date))
+					}
+				}
+			)
+		});
+		activeSkillLogItem = null;
+	}
+
+	function deleteMultiEntry(skillId: string, item: string, idx: number) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : {
+					...sk,
+					itemEntries: {
+						...(sk.itemEntries ?? {}),
+						[item]: ((sk.itemEntries ?? {})[item] ?? []).filter((_, i) => i !== idx)
+					}
+				}
+			)
+		});
+	}
+
+	function startEditMultiEntry(skillId: string, item: string, idx: number, date: string, value: number) {
+		editingMultiEntry = { skillId, item, idx };
+		editMultiEntryDate = date;
+		editMultiEntryValue = value;
+		activeSkillLogItem = null;
+	}
+
+	function saveMultiEntry() {
+		if (!student || !editingMultiEntry) return;
+		const { skillId, item, idx } = editingMultiEntry;
+		store.update(student.id, {
+			...student,
+			skills: student.skills.map((sk) =>
+				sk.skillId !== skillId ? sk : {
+					...sk,
+					itemEntries: {
+						...(sk.itemEntries ?? {}),
+						[item]: ((sk.itemEntries ?? {})[item] ?? [])
+							.map((e, i) => i === idx ? { date: editMultiEntryDate, value: editMultiEntryValue } : e)
+							.sort((a, b) => a.date.localeCompare(b.date))
+					}
+				}
+			)
+		});
+		editingMultiEntry = null;
 	}
 
 	const assignedSkillIds = $derived(new Set((student?.skills ?? []).map((sk) => sk.skillId)));
@@ -111,7 +195,7 @@
 		if (!student) return;
 		store.update(student.id, {
 			...student,
-			skills: [...student.skills, { skillId, status: 'not_started', entries: [] }]
+			skills: [...student.skills, { skillId, status: 'not_started', entries: [], itemEntries: {} }]
 		});
 		showAssignSkill = false;
 	}
@@ -333,6 +417,13 @@
 	}
 
 	// ── Big projects ─────────────────────────────────────────────
+	let inlineProjectId = $state<string | null>(null);
+	let inlineProjectTitle = $state('');
+	let inlineProjectStart = $state(today);
+	let inlineProjectDue = $state(today);
+	let editingNotes = $state(false);
+	let notesInput = $state('');
+
 	function addProject() {
 		if (!draft) return;
 		draft.projects = [
@@ -344,6 +435,58 @@
 	function removeProject(id: string) {
 		if (!draft) return;
 		draft.projects = draft.projects.filter((p) => p.id !== id);
+	}
+
+	function addProjectInline() {
+		if (!student) return;
+		const id = crypto.randomUUID();
+		store.update(student.id, {
+			...student,
+			projects: [...student.projects, { id, title: '', startDate: today, dueDate: today }]
+		});
+		inlineProjectId = id;
+		inlineProjectTitle = '';
+		inlineProjectStart = today;
+		inlineProjectDue = today;
+	}
+
+	function startEditProject(project: BigProject) {
+		inlineProjectId = project.id;
+		inlineProjectTitle = project.title;
+		inlineProjectStart = project.startDate;
+		inlineProjectDue = project.dueDate;
+	}
+
+	function saveProjectInline() {
+		if (!student || !inlineProjectId) return;
+		const id = inlineProjectId;
+		store.update(student.id, {
+			...student,
+			projects: student.projects.map((p) =>
+				p.id !== id ? p : { ...p, title: inlineProjectTitle, startDate: inlineProjectStart, dueDate: inlineProjectDue }
+			)
+		});
+		inlineProjectId = null;
+	}
+
+	function removeProjectInline(id: string) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			projects: student.projects.filter((p) => p.id !== id)
+		});
+		if (inlineProjectId === id) inlineProjectId = null;
+	}
+
+	function startEditNotes() {
+		notesInput = student?.notes ?? '';
+		editingNotes = true;
+	}
+
+	function saveNotes() {
+		if (!student) return;
+		store.update(student.id, { ...student, notes: notesInput });
+		editingNotes = false;
 	}
 
 	function getProgress(project: BigProject) {
@@ -1015,13 +1158,13 @@
 				<div class="mb-3 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Big Projects</h2>
 					{#if editMode}
-						<button onclick={addProject} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
-							+ Add
-						</button>
+						<button onclick={addProject} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
+					{:else}
+						<button onclick={addProjectInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
 					{/if}
 				</div>
 				{#if s.projects.length === 0}
-					<p class="text-sm text-ctp-overlay0">{editMode ? 'No projects yet.' : '—'}</p>
+					<p class="text-sm text-ctp-overlay0">No projects yet.</p>
 				{:else}
 					<div class="space-y-4">
 						{#each s.projects as project, i}
@@ -1034,47 +1177,46 @@
 											placeholder="Project title"
 										/>
 										<div>
-											<label for={'proj-start-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">
-												Start
-											</label>
-											<input
-												id={'proj-start-' + project.id}
-												type="date"
-												bind:value={draft!.projects[i].startDate}
-												class={inputClass}
-											/>
+											<label for={'proj-start-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">Start</label>
+											<input id={'proj-start-' + project.id} type="date" bind:value={draft!.projects[i].startDate} class={inputClass} />
 										</div>
 										<div>
-											<label for={'proj-due-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">
-												Due
-											</label>
-											<input
-												id={'proj-due-' + project.id}
-												type="date"
-												bind:value={draft!.projects[i].dueDate}
-												class={inputClass}
-											/>
+											<label for={'proj-due-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">Due</label>
+											<input id={'proj-due-' + project.id} type="date" bind:value={draft!.projects[i].dueDate} class={inputClass} />
 										</div>
 									</div>
-									<button
-										onclick={() => removeProject(project.id)}
-										class="mt-2 text-xs text-ctp-red/70 hover:text-ctp-red"
-									>
-										Remove
-									</button>
+									<button onclick={() => removeProject(project.id)} class="mt-2 text-xs text-ctp-red/70 hover:text-ctp-red">Remove</button>
+								{:else if inlineProjectId === project.id}
+									<div class="space-y-2">
+										<input bind:value={inlineProjectTitle} class="{inputClass} w-full" placeholder="Project title"
+											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveProjectInline(); } if (e.key === 'Escape') { e.preventDefault(); inlineProjectId = null; } }} />
+										<div class="grid grid-cols-2 gap-2">
+											<div>
+												<label for="inline-proj-start" class="mb-1 block text-xs text-ctp-overlay0">Start</label>
+												<input id="inline-proj-start" type="date" bind:value={inlineProjectStart} class={inputClass} />
+											</div>
+											<div>
+												<label for="inline-proj-due" class="mb-1 block text-xs text-ctp-overlay0">Due</label>
+												<input id="inline-proj-due" type="date" bind:value={inlineProjectDue} class={inputClass} />
+											</div>
+										</div>
+										<div class="flex items-center gap-2">
+											<button onclick={saveProjectInline} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+											<button onclick={() => (inlineProjectId = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+											<button onclick={() => removeProjectInline(project.id)} class="ml-auto text-xs text-ctp-red/60 hover:text-ctp-red transition-colors">Remove</button>
+										</div>
+									</div>
 								{:else}
 									{@const prog = getProgress(project)}
-									<p class="mb-1 font-medium text-ctp-text">{project.title || 'Untitled'}</p>
+									<div class="mb-1 flex items-start justify-between gap-2">
+										<p class="font-medium text-ctp-text">{project.title || 'Untitled'}</p>
+										<button onclick={() => startEditProject(project)} class="shrink-0 text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors">✎</button>
+									</div>
 									<div class="mb-1 h-2.5 w-full overflow-hidden rounded-full bg-ctp-surface1">
-										<div
-											class="{barColor(prog.daysLeft, prog.overdue)} h-2.5 rounded-full transition-all"
-											style="width: {prog.pct}%"
-										></div>
+										<div class="{barColor(prog.daysLeft, prog.overdue)} h-2.5 rounded-full transition-all" style="width: {prog.pct}%"></div>
 									</div>
 									<div class="flex justify-between text-xs text-ctp-overlay0">
-										<span>
-											{project.startDate ? new Date(project.startDate + 'T00:00:00').toLocaleDateString() : '—'}
-										</span>
+										<span>{project.startDate ? new Date(project.startDate + 'T00:00:00').toLocaleDateString() : '—'}</span>
 										<span>
 											{#if prog.overdue}
 												<span class="font-medium text-ctp-red">Overdue</span>
@@ -1082,9 +1224,7 @@
 												{prog.daysLeft} day{prog.daysLeft !== 1 ? 's' : ''} left
 											{/if}
 										</span>
-										<span>
-											{project.dueDate ? new Date(project.dueDate + 'T00:00:00').toLocaleDateString() : '—'}
-										</span>
+										<span>{project.dueDate ? new Date(project.dueDate + 'T00:00:00').toLocaleDateString() : '—'}</span>
 									</div>
 								{/if}
 							</div>
@@ -1157,7 +1297,7 @@
 														{/each}
 													</div>
 
-												{:else}
+												{:else if skillDef.type === 'scored'}
 													<!-- Scored: sparkline + log -->
 													{@const lastEntry = sk.entries.at(-1)}
 													{@const prevEntry = sk.entries.length >= 2 ? sk.entries.at(-2) : null}
@@ -1239,6 +1379,81 @@
 															</div>
 														{/if}
 													{/if}
+												{:else if skillDef.type === 'multi'}
+													<!-- Multi: per-item chart + per-item logging -->
+													<SkillMultiChart items={skillDef.items ?? []} itemEntries={sk.itemEntries ?? {}} goal={skillDef.goal} unit={skillDef.unit} higherIsBetter={skillDef.higherIsBetter} />
+													{#each (skillDef.items ?? []) as item, itemIdx}
+														{@const itemHistory = (sk.itemEntries ?? {})[item] ?? []}
+														{@const lastItemEntry = itemHistory.at(-1)}
+														{@const goalMet = skillDef.goal !== undefined && lastItemEntry !== undefined && (skillDef.higherIsBetter ? lastItemEntry.value >= skillDef.goal : lastItemEntry.value <= skillDef.goal)}
+														<div class="mt-2 rounded border border-ctp-surface1 p-2">
+															<div class="flex flex-wrap items-center gap-2">
+																<span class="h-2 w-2 shrink-0 rounded-full" style="background:{COURSE_COLORS[itemIdx % COURSE_COLORS.length]}"></span>
+																<span class="text-xs font-medium text-ctp-text">{item}</span>
+																{#if lastItemEntry}
+																	<span class="text-xs font-bold text-ctp-subtext1">{lastItemEntry.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
+																	{#if goalMet}<span class="text-xs text-ctp-green">★</span>{/if}
+																{:else}
+																	<span class="text-xs text-ctp-overlay0">—</span>
+																{/if}
+																{#if !(activeSkillLogItem?.skillId === sk.skillId && activeSkillLogItem?.item === item)}
+																	<button onclick={() => openMultiLog(sk.skillId, item, lastItemEntry?.value ?? 0)} class="ml-auto rounded bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-subtext1 hover:bg-ctp-surface2">Log</button>
+																{/if}
+															</div>
+															{#if activeSkillLogItem?.skillId === sk.skillId && activeSkillLogItem?.item === item}
+																<div class="mt-1.5 flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-2 py-1.5">
+																	<input type="date" bind:value={multiLogDate} class={miniInputClass}
+																		onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitMultiLog(sk.skillId, item); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLogItem = null; } }} />
+																	<div class="flex items-center gap-1">
+																		<input type="number" bind:value={multiLogValue} class="{miniInputClass} w-20 text-right" use:autoselect
+																			onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitMultiLog(sk.skillId, item); } if (e.key === 'Escape') { e.preventDefault(); activeSkillLogItem = null; } }} />
+																		{#if skillDef.unit}<span class="text-xs text-ctp-overlay0">{skillDef.unit}</span>{/if}
+																	</div>
+																	{#if itemHistory.length > 0}
+																		{@const lv = itemHistory.at(-1)!.value}
+																		<button onclick={() => { multiLogValue = lv; submitMultiLog(sk.skillId, item); }}
+																			class="rounded border border-ctp-surface2 px-2 py-1 text-xs text-ctp-subtext0 hover:border-ctp-overlay0 hover:text-ctp-text transition-colors"
+																		>↩ {lv}{skillDef.unit ? ' ' + skillDef.unit : ''}</button>
+																	{/if}
+																	<button onclick={() => submitMultiLog(sk.skillId, item)} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+																	<button onclick={() => (activeSkillLogItem = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+																</div>
+															{/if}
+															{#if itemHistory.length > 0}
+																<button onclick={() => toggleMultiHistory(sk.skillId, item)} class="mt-1.5 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">
+																	{expandedMultiHistory.has(sk.skillId + '::'  + item) ? '▾' : '▸'} History ({itemHistory.length})
+																</button>
+																{#if expandedMultiHistory.has(sk.skillId + '::'  + item)}
+																	<div class="mt-1 space-y-0.5">
+																		{#each [...itemHistory].reverse() as e, ri}
+																			{@const idx = itemHistory.length - 1 - ri}
+																			{#if editingMultiEntry?.skillId === sk.skillId && editingMultiEntry?.item === item && editingMultiEntry?.idx === idx}
+																				<div class="flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-2 py-1">
+																					<input type="date" bind:value={editMultiEntryDate} class={miniInputClass}
+																						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveMultiEntry(); } if (e.key === 'Escape') { e.preventDefault(); editingMultiEntry = null; } }} />
+																					<div class="flex items-center gap-1">
+																						<input type="number" bind:value={editMultiEntryValue} class="{miniInputClass} w-20 text-right" use:autoselect
+																							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveMultiEntry(); } if (e.key === 'Escape') { e.preventDefault(); editingMultiEntry = null; } }} />
+																						{#if skillDef.unit}<span class="text-xs text-ctp-overlay0">{skillDef.unit}</span>{/if}
+																					</div>
+																					<button onclick={saveMultiEntry} class="rounded bg-ctp-blue px-2 py-0.5 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+																					<button onclick={() => (editingMultiEntry = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+																				</div>
+																			{:else}
+																				<div class="flex items-center gap-2 text-xs">
+																					<span class="font-medium text-ctp-subtext1">{e.value}{skillDef.unit ? ' ' + skillDef.unit : ''}</span>
+																					<span class="text-ctp-overlay0">·</span>
+																					<span class="text-ctp-overlay0">{new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+																					<button onclick={() => startEditMultiEntry(sk.skillId, item, idx, e.date, e.value)} class="text-ctp-overlay0/60 hover:text-ctp-blue transition-colors" title="Edit">✎</button>
+																					<button onclick={() => deleteMultiEntry(sk.skillId, item, idx)} class="text-ctp-red/40 hover:text-ctp-red transition-colors" title="Delete">✕</button>
+																				</div>
+																			{/if}
+																		{/each}
+																	</div>
+																{/if}
+															{/if}
+														</div>
+													{/each}
 												{/if}
 
 											{#if skillDef.description}
@@ -1256,7 +1471,12 @@
 
 			<!-- Notes -->
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
-				<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Notes</h2>
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Notes</h2>
+					{#if !editMode && !editingNotes}
+						<button onclick={startEditNotes} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors">✎</button>
+					{/if}
+				</div>
 				{#if editMode}
 					<textarea
 						bind:value={draft!.notes}
@@ -1264,6 +1484,17 @@
 						class="w-full rounded px-3 py-2 text-sm"
 						placeholder="Any additional notes..."
 					></textarea>
+				{:else if editingNotes}
+					<textarea
+						bind:value={notesInput}
+						rows="4"
+						class="w-full rounded px-3 py-2 text-sm"
+						placeholder="Any additional notes..."
+					></textarea>
+					<div class="mt-2 flex gap-2">
+						<button onclick={saveNotes} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+						<button onclick={() => (editingNotes = false)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+					</div>
 				{:else}
 					<p class="whitespace-pre-wrap text-sm text-ctp-text">{s.notes || '—'}</p>
 				{/if}

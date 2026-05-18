@@ -1,4 +1,4 @@
-import type { Day, SkillBankItem, Student } from './types';
+import type { Day, SkillBankItem, Student, StudentSkill } from './types';
 import { STUDENT_COLORS } from './types';
 import { supabase } from './supabase';
 
@@ -31,7 +31,7 @@ function blank(partial: Partial<Student> & Pick<Student, 'id' | 'name'>): Studen
 		projects: [],
 		extraLogins: [],
 		courses: [],
-		skills: [],
+		skills: [] as StudentSkill[],
 		hiatus: false,
 		color: colorForId(partial.id),
 		...partial
@@ -81,7 +81,10 @@ function migrate(s: unknown): Student {
 	return {
 		...raw,
 		courses: raw.courses ?? [],
-		skills: raw.skills ?? [],
+		skills: (raw.skills ?? []).map((sk: StudentSkill) => ({
+			...sk,
+			itemEntries: sk.itemEntries ?? {}
+		})),
 		days: raw.days ?? (raw.day ? [raw.day as Day] : []),
 		hiatus: raw.hiatus ?? false,
 		color: raw.color ?? colorForId(raw.id)

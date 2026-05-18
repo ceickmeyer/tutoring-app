@@ -77,9 +77,11 @@
 	let newSkillUnit = $state('');
 	let newSkillHigher = $state(true);
 	let newSkillGoal = $state<number | null>(null);
+	let newSkillItems = $state('');
 
 	function addSkill() {
 		if (!newSkillName.trim()) return;
+		const parsedItems = newSkillItems.split(',').map((s) => s.trim()).filter(Boolean);
 		store.addSkill({
 			id: crypto.randomUUID(),
 			name: newSkillName.trim(),
@@ -88,12 +90,14 @@
 			type: newSkillType,
 			unit: newSkillUnit.trim(),
 			higherIsBetter: newSkillHigher,
-			goal: newSkillGoal !== null && !isNaN(newSkillGoal) ? newSkillGoal : undefined
+			goal: newSkillGoal !== null && !isNaN(newSkillGoal) ? newSkillGoal : undefined,
+			items: newSkillType === 'multi' && parsedItems.length ? parsedItems : undefined
 		} satisfies SkillBankItem);
 		newSkillName = '';
 		newSkillDescription = '';
 		newSkillUnit = '';
 		newSkillGoal = null;
+		newSkillItems = '';
 	}
 
 	const skillCategories = $derived(
@@ -109,6 +113,7 @@
 	let editSkillUnit = $state('');
 	let editSkillHigher = $state(true);
 	let editSkillGoal = $state<number | null>(null);
+	let editSkillItems = $state('');
 
 	function startEditSkill(skill: SkillBankItem) {
 		editingSkillId = skill.id;
@@ -119,10 +124,12 @@
 		editSkillUnit = skill.unit;
 		editSkillHigher = skill.higherIsBetter;
 		editSkillGoal = skill.goal ?? null;
+		editSkillItems = skill.items?.join(', ') ?? '';
 	}
 
 	function saveEditSkill() {
 		if (!editingSkillId || !editSkillName.trim()) return;
+		const parsedItems = editSkillItems.split(',').map((s) => s.trim()).filter(Boolean);
 		store.updateSkill(editingSkillId, {
 			name: editSkillName.trim(),
 			category: editSkillCategory.trim() || 'General',
@@ -130,7 +137,8 @@
 			type: editSkillType,
 			unit: editSkillUnit.trim(),
 			higherIsBetter: editSkillHigher,
-			goal: editSkillGoal !== null && !isNaN(editSkillGoal) ? editSkillGoal : undefined
+			goal: editSkillGoal !== null && !isNaN(editSkillGoal) ? editSkillGoal : undefined,
+			items: editSkillType === 'multi' && parsedItems.length ? parsedItems : undefined
 		});
 		editingSkillId = null;
 	}
@@ -238,6 +246,7 @@
 			projects: [],
 			extraLogins: [],
 			courses: [],
+			skills: [],
 			hiatus: false,
 			color: STUDENT_COLORS[store.list.length % STUDENT_COLORS.length]
 		});
@@ -280,6 +289,7 @@
 				projects: [],
 				extraLogins: [],
 				courses: [],
+				skills: [],
 				hiatus: false,
 				color: STUDENT_COLORS[store.list.length % STUDENT_COLORS.length]
 			});
@@ -629,11 +639,11 @@
 													<div class="flex flex-wrap items-center gap-3">
 														<div class="flex items-center gap-2">
 															<span class="text-xs text-ctp-subtext0">Type:</span>
-															{#each [['status', 'Status'], ['scored', 'Scored']] as [val, label]}
-																<button onclick={() => (editSkillType = val as SkillType)} class="{editSkillType === val ? 'bg-ctp-blue text-ctp-crust' : 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2 py-0.5 text-xs font-medium transition-colors">{label}</button>
+															{#each [['status', 'Status'], ['scored', 'Scored'], ['multi', 'Multi']] as [val, lbl]}
+																<button onclick={() => (editSkillType = val as SkillType)} class="{editSkillType === val ? 'bg-ctp-blue text-ctp-crust' : 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2 py-0.5 text-xs font-medium transition-colors">{lbl}</button>
 															{/each}
 														</div>
-														{#if editSkillType === 'scored'}
+														{#if editSkillType === 'scored' || editSkillType === 'multi'}
 															<input bind:value={editSkillUnit} class="w-24 rounded px-2 py-0.5 text-xs" placeholder="Unit" />
 															<label class="flex items-center gap-1.5 text-xs text-ctp-subtext0 cursor-pointer">
 																<input type="checkbox" bind:checked={editSkillHigher} class="rounded" />
@@ -641,8 +651,13 @@
 															</label>
 															<div class="flex items-center gap-1.5">
 																<span class="text-xs text-ctp-subtext0">Goal:</span>
-																<input type="number" bind:value={editSkillGoal} class="w-24 rounded px-2 py-0.5 text-xs" placeholder="e.g. 100" />
+																<input type="number" bind:value={editSkillGoal} class="w-24 rounded px-2 py-0.5 text-xs" placeholder="e.g. 30" />
 																{#if editSkillUnit}<span class="text-xs text-ctp-overlay0">{editSkillUnit}</span>{/if}
+															</div>
+														{/if}
+														{#if editSkillType === 'multi'}
+															<div class="w-full">
+																<input bind:value={editSkillItems} class="w-full rounded px-2 py-0.5 text-xs" placeholder="Items, comma-separated (e.g. 2s, 3s, 4s, 5s)" />
 															</div>
 														{/if}
 													</div>
@@ -690,14 +705,14 @@
 					<div class="flex flex-wrap items-center gap-3">
 						<div class="flex items-center gap-2">
 							<span class="text-xs text-ctp-subtext0">Type:</span>
-							{#each [['status', 'Status'], ['scored', 'Scored']] as [val, label]}
+							{#each [['status', 'Status'], ['scored', 'Scored'], ['multi', 'Multi']] as [val, label]}
 								<button
 									onclick={() => (newSkillType = val as SkillType)}
 									class="{newSkillType === val ? 'bg-ctp-blue text-ctp-crust' : 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2.5 py-1 text-xs font-medium transition-colors"
 								>{label}</button>
 							{/each}
 						</div>
-						{#if newSkillType === 'scored'}
+						{#if newSkillType === 'scored' || newSkillType === 'multi'}
 							<input bind:value={newSkillUnit} class="w-28 rounded px-2.5 py-1 text-xs" placeholder="Unit (wpm, sec…)" />
 							<label class="flex items-center gap-1.5 text-xs text-ctp-subtext0 cursor-pointer">
 								<input type="checkbox" bind:checked={newSkillHigher} class="rounded" />
@@ -707,6 +722,12 @@
 								<span class="text-xs text-ctp-subtext0">Goal:</span>
 								<input type="number" bind:value={newSkillGoal} class="w-24 rounded px-2.5 py-1 text-xs" placeholder="e.g. 100" />
 								{#if newSkillUnit}<span class="text-xs text-ctp-overlay0">{newSkillUnit}</span>{/if}
+							</div>
+						{/if}
+						{#if newSkillType === 'multi'}
+							<div class="flex items-center gap-1.5">
+								<span class="text-xs text-ctp-subtext0">Items:</span>
+								<input bind:value={newSkillItems} class="w-56 rounded px-2.5 py-1 text-xs" placeholder="2s, 3s, 5s, 9s, 10s" />
 							</div>
 						{/if}
 					</div>
