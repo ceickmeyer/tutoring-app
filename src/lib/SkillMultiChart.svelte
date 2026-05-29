@@ -16,19 +16,21 @@
 		higherIsBetter?: boolean;
 	} = $props();
 
-	const W = 580,
-		H = 180;
+	const W = 580;
 	const ML = 36,
 		MR = 8,
-		MT = 12,
+		MT = 14,
 		MB = 22;
 	const LABEL_GAP = 10,
-		LABEL_W = 90,
+		LABEL_W = 110,
 		LABEL_H = 18,
-		LABEL_PAD = 2;
+		LABEL_PAD = 3;
 	const CW = W - ML - MR - LABEL_GAP - LABEL_W;
-	const CH = H - MT - MB;
 	const LABEL_X = ML + CW + LABEL_GAP;
+
+	// Height grows to fit all label rows with comfortable spacing
+	const H = $derived(Math.max(160, items.length * (LABEL_H + LABEL_PAD) + MT + MB + 16));
+	const CH = $derived(H - MT - MB);
 
 	const allEntries = $derived(Object.values(itemEntries).flat());
 
