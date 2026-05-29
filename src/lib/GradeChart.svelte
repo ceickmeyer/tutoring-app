@@ -141,6 +141,8 @@
 					}))
 	);
 
+	let hoveredItem = $state<string | null>(null);
+
 	// Smart Y ticks: multiples of 5 (or 10 for wide spans) from yMin to 100
 	const yLines = $derived.by(() => {
 		const span = 100 - yMin;
@@ -173,6 +175,7 @@
 
 			<!-- Course lines -->
 			{#each lines as line}
+				{@const dim = hoveredItem !== null && hoveredItem !== line.name}
 				{#if line.path}
 					<path
 						d={line.path}
@@ -181,6 +184,8 @@
 						stroke-width="2.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						opacity={dim ? 0.12 : 1}
+						style="transition: opacity 0.15s"
 					/>
 				{/if}
 				<!-- Data point dots -->
@@ -192,69 +197,81 @@
 						fill={line.color}
 						stroke="#24273a"
 						stroke-width="2"
+						opacity={dim ? 0.12 : 1}
+						style="transition: opacity 0.15s"
 					/>
 				{/each}
 			{/each}
 
 			<!-- End-of-line labels -->
 			{#each labels as lbl}
-				<line
-					x1={lbl.lastX}
-					y1={lbl.naturalY}
-					x2={LABEL_X}
-					y2={lbl.y + LABEL_H / 2}
-					stroke={lbl.color}
-					stroke-width="1"
-					stroke-dasharray="3 2"
-					opacity="0.5"
-				/>
-				<rect
-					x={LABEL_X}
-					y={lbl.y}
-					width={LABEL_W}
-					height={LABEL_H}
-					rx="3"
-					fill="#24273a"
-					stroke={lbl.color}
-					stroke-width="1.5"
-				/>
-				<!-- Trend icon: 10×10, centered vertically in label -->
-				{#if lbl.trend}
-					<g transform="translate({LABEL_X + 5}, {lbl.y + LABEL_H / 2 - 5}) scale({10 / 24})">
-						{#if lbl.trend === 'up'}
-							<path
-								fill-rule="evenodd"
-								clip-rule="evenodd"
-								d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
-								fill={lbl.color}
-							/>
-						{:else if lbl.trend === 'down'}
-							<g transform="rotate(180, 12, 12)">
+				{@const dim = hoveredItem !== null && hoveredItem !== lbl.name}
+				<g
+					role="button"
+					tabindex="-1"
+					opacity={dim ? 0.12 : 1}
+					style="transition: opacity 0.15s; cursor: pointer"
+					onmouseenter={() => (hoveredItem = lbl.name)}
+					onmouseleave={() => (hoveredItem = null)}
+				>
+					<line
+						x1={lbl.lastX}
+						y1={lbl.naturalY}
+						x2={LABEL_X}
+						y2={lbl.y + LABEL_H / 2}
+						stroke={lbl.color}
+						stroke-width="1"
+						stroke-dasharray="3 2"
+						opacity="0.5"
+					/>
+					<rect
+						x={LABEL_X}
+						y={lbl.y}
+						width={LABEL_W}
+						height={LABEL_H}
+						rx="3"
+						fill="#24273a"
+						stroke={lbl.color}
+						stroke-width="1.5"
+					/>
+					<!-- Trend icon: 10×10, centered vertically in label -->
+					{#if lbl.trend}
+						<g transform="translate({LABEL_X + 5}, {lbl.y + LABEL_H / 2 - 5}) scale({10 / 24})">
+							{#if lbl.trend === 'up'}
 								<path
 									fill-rule="evenodd"
 									clip-rule="evenodd"
 									d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
 									fill={lbl.color}
 								/>
-							</g>
-						{:else}
-							<path
-								d="M3 12L21 12"
-								stroke={lbl.color}
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						{/if}
-					</g>
-					<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
-						>{lbl.name} – {lbl.grade}%</text
-					>
-				{:else}
-					<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
-						>{lbl.name} – {lbl.grade}%</text
-					>
-				{/if}
+							{:else if lbl.trend === 'down'}
+								<g transform="rotate(180, 12, 12)">
+									<path
+										fill-rule="evenodd"
+										clip-rule="evenodd"
+										d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
+										fill={lbl.color}
+									/>
+								</g>
+							{:else}
+								<path
+									d="M3 12L21 12"
+									stroke={lbl.color}
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							{/if}
+						</g>
+						<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+							>{lbl.name} – {lbl.grade}%</text
+						>
+					{:else}
+						<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+							>{lbl.name} – {lbl.grade}%</text
+						>
+					{/if}
+				</g>
 			{/each}
 		</svg>
 

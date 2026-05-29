@@ -3,6 +3,7 @@
 	import GradeChart from '$lib/GradeChart.svelte';
 	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
 	import SkillSparkline from '$lib/SkillSparkline.svelte';
+	import { supabase } from '$lib/supabase';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
 	import type { BigProject, Day, SkillStatus, Student } from '$lib/types';
@@ -489,6 +490,32 @@
 		editingNotes = false;
 	}
 
+	let shareCopied = $state(false);
+	let shareError = $state(false);
+
+	async function copyShareLink() {
+		if (!student) return;
+		const id = crypto.randomUUID();
+		const { error } = await supabase.from('public_shares').insert({
+			id,
+			data: {
+				name: student.name,
+				color: student.color,
+				courses: student.courses,
+				projects: student.projects
+			}
+		});
+		if (error) {
+			shareError = true;
+			setTimeout(() => (shareError = false), 2500);
+			return;
+		}
+		const url = `${window.location.origin}/share/${id}`;
+		await navigator.clipboard.writeText(url);
+		shareCopied = true;
+		setTimeout(() => (shareCopied = false), 2000);
+	}
+
 	function getProgress(project: BigProject) {
 		if (!project.startDate || !project.dueDate) return { pct: 0, daysLeft: null, overdue: false };
 		const now = Date.now();
@@ -558,6 +585,12 @@
 									: 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
 							>
 								{student.hiatus ? '▶ Resume Student' : '⏸ Pause Student'}
+							</button>
+							<button
+								onclick={copyShareLink}
+								class="rounded border px-3 py-1.5 text-sm transition-colors {shareCopied ? 'border-ctp-green/40 text-ctp-green' : shareError ? 'border-ctp-red/40 text-ctp-red' : 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
+							>
+								{shareCopied ? '✓ Copied!' : shareError ? 'Failed' : 'Share'}
 							</button>
 							<button
 								onclick={startEdit}

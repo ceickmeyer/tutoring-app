@@ -28,6 +28,8 @@
 	const CW = W - ML - MR - LABEL_GAP - LABEL_W;
 	const LABEL_X = ML + CW + LABEL_GAP;
 
+	let hoveredItem = $state<string | null>(null);
+
 	// Height grows to fit all label rows with comfortable spacing
 	const H = $derived(Math.max(160, items.length * (LABEL_H + LABEL_PAD) + MT + MB + 16));
 	const CH = $derived(H - MT - MB);
@@ -201,6 +203,7 @@
 
 			<!-- Item lines and dots -->
 			{#each lines as l}
+				{@const dim = hoveredItem !== null && hoveredItem !== l.item}
 				{#if l.path}
 					<path
 						d={l.path}
@@ -209,6 +212,8 @@
 						stroke-width="2.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						opacity={dim ? 0.12 : 1}
+						style="transition: opacity 0.15s"
 					/>
 				{/if}
 				{#each l.pts as [x, y]}
@@ -219,42 +224,54 @@
 						fill={l.color}
 						stroke="#24273a"
 						stroke-width="2"
+						opacity={dim ? 0.12 : 1}
+						style="transition: opacity 0.15s"
 					/>
 				{/each}
 			{/each}
 
 			<!-- End-of-line labels -->
 			{#each labels as lbl}
-				<line
-					x1={lbl.lastX}
-					y1={lbl.naturalY}
-					x2={LABEL_X}
-					y2={lbl.y + LABEL_H / 2}
-					stroke={lbl.color}
-					stroke-width="1"
-					stroke-dasharray="3 2"
-					opacity="0.5"
-				/>
-				<rect
-					x={LABEL_X}
-					y={lbl.y}
-					width={LABEL_W}
-					height={LABEL_H}
-					rx="3"
-					fill="#24273a"
-					stroke={lbl.color}
-					stroke-width="1.5"
-				/>
-				<text
-					x={LABEL_X + 5}
-					y={lbl.y + LABEL_H - 5}
-					font-size="11"
-					font-weight="500"
-					fill={lbl.color}
+				{@const dim = hoveredItem !== null && hoveredItem !== lbl.item}
+				<g
+					role="button"
+					tabindex="-1"
+					opacity={dim ? 0.12 : 1}
+					style="transition: opacity 0.15s; cursor: pointer"
+					onmouseenter={() => (hoveredItem = lbl.item)}
+					onmouseleave={() => (hoveredItem = null)}
 				>
-					{lbl.item}{lbl.lastEntry ? ': ' + lbl.lastEntry.value + (unit ? ' ' + unit : '') : ''}
-					{lbl.goalMet ? ' ★' : ''}
-				</text>
+					<line
+						x1={lbl.lastX}
+						y1={lbl.naturalY}
+						x2={LABEL_X}
+						y2={lbl.y + LABEL_H / 2}
+						stroke={lbl.color}
+						stroke-width="1"
+						stroke-dasharray="3 2"
+						opacity="0.5"
+					/>
+					<rect
+						x={LABEL_X}
+						y={lbl.y}
+						width={LABEL_W}
+						height={LABEL_H}
+						rx="3"
+						fill="#24273a"
+						stroke={lbl.color}
+						stroke-width="1.5"
+					/>
+					<text
+						x={LABEL_X + 5}
+						y={lbl.y + LABEL_H - 5}
+						font-size="11"
+						font-weight="500"
+						fill={lbl.color}
+					>
+						{lbl.item}{lbl.lastEntry ? ': ' + lbl.lastEntry.value + (unit ? ' ' + unit : '') : ''}
+						{lbl.goalMet ? ' ★' : ''}
+					</text>
+				</g>
 			{/each}
 
 			<!-- X axis labels -->
