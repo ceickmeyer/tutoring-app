@@ -19,7 +19,10 @@
 			if (session) {
 				await store.init(session.user.id);
 				ready = true;
-			} else if (window.location.pathname === '/login') {
+			} else if (
+				window.location.pathname === '/login' ||
+				window.location.pathname.startsWith('/share/')
+			) {
 				ready = true;
 			} else {
 				await goto('/login');
