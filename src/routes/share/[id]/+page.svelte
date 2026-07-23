@@ -1,10 +1,39 @@
 <script lang="ts">
 	import GradeChart from '$lib/GradeChart.svelte';
+	import SkillSparkline from '$lib/SkillSparkline.svelte';
+	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
+	import type { SkillStatus } from '$lib/types';
 	import type { ShareData } from './+page';
 
 	let { data } = $props();
 	const s = $derived(data.shareData as ShareData | null);
 	const activeCourses = $derived(s?.courses.filter((c) => c.entries.length > 0) ?? []);
+
+	const STATUS_LABELS: Record<SkillStatus, string> = {
+		not_started: 'Not started',
+		working: 'Still needs guidance',
+		mastered: 'Independently solving'
+	};
+	const STATUS_CLASSES: Record<SkillStatus, string> = {
+		not_started: 'bg-ctp-surface2 text-ctp-subtext1',
+		working: 'bg-ctp-yellow/20 text-ctp-yellow border border-ctp-yellow/30',
+		mastered: 'bg-ctp-green/20 text-ctp-green border border-ctp-green/30'
+	};
+
+	const skillCategories = $derived.by(() => {
+		if (!s?.skills || !s.skillDefs) return [];
+		const cats = s.skills
+			.map((sk) => s.skillDefs!.find((b) => b.id === sk.skillId)?.category)
+			.filter((c): c is string => !!c);
+		return [...new Set(cats)].sort();
+	});
+
+	function skillsInCategory(cat: string) {
+		if (!s?.skills || !s.skillDefs) return [];
+		return s.skills
+			.map((sk) => ({ sk, def: s.skillDefs!.find((b) => b.id === sk.skillId) }))
+			.filter((x) => x.def?.category === cat);
+	}
 
 	function getProgress(project: { startDate: string; dueDate: string }) {
 		if (!project.startDate || !project.dueDate) return { pct: 0, daysLeft: null, overdue: false };
@@ -46,6 +75,62 @@
 				<section>
 					<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Grades</h2>
 					<GradeChart courses={activeCourses} />
+				</section>
+			{/if}
+
+			{#if skillCategories.length > 0}
+				<section>
+					<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Skills</h2>
+					<div class="space-y-5">
+						{#each skillCategories as cat}
+							<div>
+								<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+								<div class="space-y-2">
+									{#each skillsInCategory(cat) as { sk, def } (sk.skillId)}
+										{#if def}
+											<div class="rounded-lg bg-ctp-surface0 p-4 shadow-sm">
+												<div class="flex items-start justify-between gap-3">
+													<span class="text-sm font-medium text-ctp-text">{def.name}</span>
+													{#if def.type === 'status'}
+														<span class="shrink-0 rounded px-2 py-1 text-xs {STATUS_CLASSES[sk.status]}">{STATUS_LABELS[sk.status]}</span>
+													{/if}
+												</div>
+
+												{#if def.type === 'scored'}
+													{@const lastEntry = sk.entries.at(-1)}
+													<div class="mt-1 flex flex-wrap items-center gap-2">
+														{#if lastEntry}
+															<span class="text-lg font-bold text-ctp-text">{lastEntry.value}{def.unit ? ' ' + def.unit : ''}</span>
+															{#if def.goal !== undefined}
+																<span class="text-xs text-ctp-overlay0">→ goal: <span class="font-medium text-ctp-subtext1">{def.goal}{def.unit ? ' ' + def.unit : ''}</span></span>
+															{/if}
+														{:else}
+															<span class="text-sm text-ctp-overlay0">No entries yet</span>
+														{/if}
+													</div>
+													<SkillSparkline entries={sk.entries} goal={def.goal} unit={def.unit} higherIsBetter={def.higherIsBetter} />
+												{:else if def.type === 'multi'}
+													<SkillMultiChart items={def.items ?? []} itemEntries={sk.itemEntries ?? {}} goal={def.goal} unit={def.unit} higherIsBetter={def.higherIsBetter} />
+												{/if}
+
+												{#if def.description}
+													<p class="mt-2 whitespace-pre-wrap text-xs text-ctp-subtext0">{def.description}</p>
+												{/if}
+												{#if def.example}
+													<p class="mt-1 text-xs text-ctp-overlay0">e.g. <span class="font-mono">{def.example}</span></p>
+												{/if}
+												{#if sk.notes}
+													<div class="mt-2 rounded bg-ctp-yellow/10 px-2 py-1.5">
+														<p class="whitespace-pre-wrap text-xs text-ctp-subtext1">{sk.notes}</p>
+													</div>
+												{/if}
+											</div>
+										{/if}
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
 				</section>
 			{/if}
 

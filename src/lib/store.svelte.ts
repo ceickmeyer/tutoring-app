@@ -83,7 +83,8 @@ function migrate(s: unknown): Student {
 		courses: raw.courses ?? [],
 		skills: (raw.skills ?? []).map((sk: StudentSkill) => ({
 			...sk,
-			itemEntries: sk.itemEntries ?? {}
+			itemEntries: sk.itemEntries ?? {},
+			notes: sk.notes ?? ''
 		})),
 		days: raw.days ?? (raw.day ? [raw.day as Day] : []),
 		hiatus: raw.hiatus ?? false,
@@ -116,7 +117,7 @@ class StudentStore {
 			} else {
 				const wrapper = raw as { students: Record<string, unknown>[]; skillBank: SkillBankItem[] };
 				this.list = (wrapper.students ?? []).map(migrate);
-				this.skillBank = wrapper.skillBank ?? [];
+				this.skillBank = (wrapper.skillBank ?? []).map((s) => ({ ...s, example: s.example ?? '' }));
 			}
 		} else {
 			// First login: migrate from localStorage if present, else start empty

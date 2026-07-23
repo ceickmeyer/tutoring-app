@@ -84,6 +84,8 @@
 
 	// ── Skills ───────────────────────────────────────────────────
 	let showAssignSkill = $state(false);
+	let assignSkillSearch = $state('');
+	let selectedToAssign = $state<Set<string>>(new Set());
 	let activeSkillLog = $state<string | null>(null);
 	let skillLogDate = $state(today);
 	let skillLogValue = $state<number>(0);
@@ -98,6 +100,8 @@
 	let editMultiEntryDate = $state(today);
 	let editMultiEntryValue = $state<number>(0);
 	let expandedMultiHistory = $state<Set<string>>(new Set());
+	let editingSkillNotes = $state<string | null>(null);
+	let skillNotesInput = $state('');
 
 	function toggleHistory(skillId: string) {
 		const next = new Set(expandedHistory);
@@ -184,6 +188,19 @@
 
 	const assignedSkillIds = $derived(new Set((student?.skills ?? []).map((sk) => sk.skillId)));
 	const availableSkills = $derived(store.skillBank.filter((s) => !assignedSkillIds.has(s.id)));
+	const filteredAvailableSkills = $derived.by(() => {
+		const q = assignSkillSearch.trim().toLowerCase();
+		if (!q) return availableSkills;
+		return availableSkills.filter(
+			(s) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
+		);
+	});
+	const availableSkillCategories = $derived([
+		...new Set(filteredAvailableSkills.map((s) => s.category))
+	].sort());
+	function availableSkillsInCategory(cat: string) {
+		return filteredAvailableSkills.filter((s) => s.category === cat);
+	}
 	const assignedCategories = $derived.by(() => {
 		if (!student) return [];
 		const cats = student.skills
@@ -192,13 +209,58 @@
 		return [...new Set(cats)].sort();
 	});
 
-	function assignSkill(skillId: string) {
+	function toggleSelectToAssign(skillId: string) {
+		const next = new Set(selectedToAssign);
+		if (next.has(skillId)) next.delete(skillId);
+		else next.add(skillId);
+		selectedToAssign = next;
+	}
+
+	function toggleSelectAllInCategory(cat: string) {
+		const idsInCat = availableSkillsInCategory(cat).map((s) => s.id);
+		const allSelected = idsInCat.every((id) => selectedToAssign.has(id));
+		const next = new Set(selectedToAssign);
+		if (allSelected) idsInCat.forEach((id) => next.delete(id));
+		else idsInCat.forEach((id) => next.add(id));
+		selectedToAssign = next;
+	}
+
+	function assignSelectedSkills() {
+		if (!student || selectedToAssign.size === 0) return;
+		const newSkills = [...selectedToAssign].map((skillId) => ({
+			skillId,
+			status: 'not_started' as const,
+			entries: [],
+			itemEntries: {},
+			notes: ''
+		}));
+		store.update(student.id, {
+			...student,
+			skills: [...student.skills, ...newSkills]
+		});
+		selectedToAssign = new Set();
+		showAssignSkill = false;
+		assignSkillSearch = '';
+	}
+
+	function closeAssignSkill() {
+		showAssignSkill = false;
+		assignSkillSearch = '';
+		selectedToAssign = new Set();
+	}
+
+	function startEditSkillNotes(skillId: string, current: string) {
+		editingSkillNotes = skillId;
+		skillNotesInput = current;
+	}
+
+	function saveSkillNotes(skillId: string) {
 		if (!student) return;
 		store.update(student.id, {
 			...student,
-			skills: [...student.skills, { skillId, status: 'not_started', entries: [], itemEntries: {} }]
+			skills: student.skills.map((sk) => (sk.skillId !== skillId ? sk : { ...sk, notes: skillNotesInput }))
 		});
-		showAssignSkill = false;
+		editingSkillNotes = null;
 	}
 
 	function removeStudentSkill(skillId: string) {
@@ -496,13 +558,18 @@
 	async function copyShareLink() {
 		if (!student) return;
 		const id = crypto.randomUUID();
+		const skillDefs = student.skills
+			.map((sk) => store.skillBank.find((b) => b.id === sk.skillId))
+			.filter((b): b is NonNullable<typeof b> => !!b);
 		const { error } = await supabase.from('public_shares').insert({
 			id,
 			data: {
 				name: student.name,
 				color: student.color,
 				courses: student.courses,
-				projects: student.projects
+				projects: student.projects,
+				skills: student.skills,
+				skillDefs
 			}
 		});
 		if (error) {
@@ -1273,22 +1340,53 @@
 					{#if !editMode && store.skillBank.length > 0}
 						<div class="relative">
 							{#if showAssignSkill}
-								<div class="absolute right-0 top-6 z-10 w-56 rounded-lg border border-ctp-surface1 bg-ctp-mantle py-1 shadow-lg">
-									{#if availableSkills.length === 0}
-										<p class="px-3 py-2 text-xs text-ctp-overlay0">All skills assigned</p>
-									{:else}
-										{#each availableSkills as skill}
-											<button
-												onclick={() => assignSkill(skill.id)}
-												class="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm text-ctp-text hover:bg-ctp-surface0"
-											>
-												<span>{skill.name}</span>
-												<span class="text-xs text-ctp-overlay0">{skill.category}</span>
-											</button>
-										{/each}
-									{/if}
-									<div class="mt-1 border-t border-ctp-surface1 px-3 pt-1">
-										<button onclick={() => (showAssignSkill = false)} class="py-1 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Close</button>
+								<div class="absolute right-0 top-6 z-10 flex w-80 flex-col rounded-lg border border-ctp-surface1 bg-ctp-mantle shadow-lg" style="max-height: 26rem">
+									<div class="shrink-0 border-b border-ctp-surface1 p-2">
+										<input
+											bind:value={assignSkillSearch}
+											class="w-full rounded border border-ctp-surface2 bg-ctp-surface1 px-2.5 py-1.5 text-sm text-ctp-text placeholder:text-ctp-overlay0 focus:border-ctp-blue focus:outline-none"
+											placeholder="Search skills…"
+											onkeydown={(e) => e.key === 'Escape' && closeAssignSkill()}
+										/>
+									</div>
+									<div class="flex-1 overflow-y-auto py-1">
+										{#if availableSkills.length === 0}
+											<p class="px-3 py-2 text-xs text-ctp-overlay0">All skills assigned</p>
+										{:else if filteredAvailableSkills.length === 0}
+											<p class="px-3 py-2 text-xs text-ctp-overlay0">No skills match "{assignSkillSearch}"</p>
+										{:else}
+											{#each availableSkillCategories as cat}
+												{@const idsInCat = availableSkillsInCategory(cat).map((s) => s.id)}
+												{@const allSelected = idsInCat.every((id) => selectedToAssign.has(id))}
+												<div class="flex items-center justify-between px-3 pt-1.5 pb-0.5">
+													<p class="text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+													<button onclick={() => toggleSelectAllInCategory(cat)} class="text-xs text-ctp-blue hover:text-ctp-lavender">
+														{allSelected ? 'Clear' : 'Select all'}
+													</button>
+												</div>
+												{#each availableSkillsInCategory(cat) as skill}
+													<label class="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-ctp-text hover:bg-ctp-surface0">
+														<input
+															type="checkbox"
+															checked={selectedToAssign.has(skill.id)}
+															onchange={() => toggleSelectToAssign(skill.id)}
+															class="rounded"
+														/>
+														<span>{skill.name}</span>
+													</label>
+												{/each}
+											{/each}
+										{/if}
+									</div>
+									<div class="flex shrink-0 items-center gap-2 border-t border-ctp-surface1 px-3 py-1.5">
+										<button
+											onclick={assignSelectedSkills}
+											disabled={selectedToAssign.size === 0}
+											class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust transition-opacity hover:opacity-90 disabled:opacity-40"
+										>
+											Assign {selectedToAssign.size || ''} skill{selectedToAssign.size === 1 ? '' : 's'}
+										</button>
+										<button onclick={closeAssignSkill} class="py-1 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
 									</div>
 								</div>
 							{/if}
@@ -1491,6 +1589,32 @@
 
 											{#if skillDef.description}
 												<p class="mt-2 whitespace-pre-wrap text-xs text-ctp-subtext0">{skillDef.description}</p>
+											{/if}
+											{#if skillDef.example}
+												<p class="mt-1 text-xs text-ctp-overlay0">e.g. <span class="font-mono">{skillDef.example}</span></p>
+											{/if}
+
+											<!-- Per-student notes -->
+											{#if editingSkillNotes === sk.skillId}
+												<div class="mt-2 rounded bg-ctp-surface1 p-2">
+													<textarea
+														bind:value={skillNotesInput}
+														rows="2"
+														class="w-full rounded border border-ctp-surface2 bg-ctp-mantle px-2 py-1 text-xs text-ctp-text placeholder:text-ctp-overlay0 focus:border-ctp-blue focus:outline-none"
+														placeholder="Notes for this student (e.g. gets confused with numbers like 97)"
+													></textarea>
+													<div class="mt-1.5 flex gap-2">
+														<button onclick={() => saveSkillNotes(sk.skillId)} class="rounded bg-ctp-blue px-2 py-0.5 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+														<button onclick={() => (editingSkillNotes = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+													</div>
+												</div>
+											{:else if sk.notes}
+												<div class="mt-2 flex items-start justify-between gap-2 rounded bg-ctp-yellow/10 px-2 py-1.5">
+													<p class="whitespace-pre-wrap text-xs text-ctp-subtext1">{sk.notes}</p>
+													<button onclick={() => startEditSkillNotes(sk.skillId, sk.notes ?? '')} class="shrink-0 text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors">✎</button>
+												</div>
+											{:else}
+												<button onclick={() => startEditSkillNotes(sk.skillId, '')} class="mt-2 text-xs text-ctp-overlay0/60 hover:text-ctp-blue transition-colors">+ Add note</button>
 											{/if}
 										</div>
 									{/if}

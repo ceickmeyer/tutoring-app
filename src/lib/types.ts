@@ -80,6 +80,7 @@ export interface SkillBankItem {
 	name: string;
 	category: string;
 	description: string;     // shown to parents; same for every student
+	example: string;         // a worked example, e.g. "518 = 500+10+8"
 	type: SkillType;
 	unit: string;            // '%', 'wpm', 'sec', 'min', 'words', '' …
 	higherIsBetter: boolean; // for scored: wpm=true, time=false
@@ -97,6 +98,7 @@ export interface StudentSkill {
 	status: SkillStatus;
 	entries: SkillEntry[];
 	itemEntries?: Record<string, SkillEntry[]>; // for 'multi' type: item name → entries
+	notes?: string; // student-specific notes for this skill
 }
 
 export interface Student {
