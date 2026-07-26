@@ -65,6 +65,41 @@
 		});
 	}
 
+	// ── Bulk select / delete ────────────────────────────────────────
+	let bulkSelectMode = $state(false);
+	let selectedForDelete = $state<Set<string>>(new Set());
+	let confirmBulkDelete = $state(false);
+
+	function toggleBulkSelectMode() {
+		bulkSelectMode = !bulkSelectMode;
+		selectedForDelete = new Set();
+		confirmBulkDelete = false;
+		if (bulkSelectMode) expandAll();
+	}
+
+	function toggleSelectForDelete(id: string) {
+		const next = new Set(selectedForDelete);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		selectedForDelete = next;
+	}
+
+	function toggleSelectAllForDeleteInCategory(cat: string) {
+		const ids = skillsInCategory(cat).map((s) => s.id);
+		const allSelected = ids.every((id) => selectedForDelete.has(id));
+		const next = new Set(selectedForDelete);
+		if (allSelected) ids.forEach((id) => next.delete(id));
+		else ids.forEach((id) => next.add(id));
+		selectedForDelete = next;
+	}
+
+	function confirmDeleteSelected() {
+		for (const id of selectedForDelete) store.removeSkill(id);
+		selectedForDelete = new Set();
+		confirmBulkDelete = false;
+		bulkSelectMode = false;
+	}
+
 	// ── Single skill add form ──────────────────────────────────────
 	let newSkillName = $state('');
 	let newSkillCategory = $state('');
@@ -109,10 +144,13 @@
 	let bulkNames = $state('');
 	let bulkAddedMsg = $state('');
 
-	function parseBulkLine(line: string): { name: string; example: string } {
-		const idx = line.indexOf('|');
-		if (idx === -1) return { name: line.trim(), example: '' };
-		return { name: line.slice(0, idx).trim(), example: line.slice(idx + 1).trim() };
+	// One skill per line. "Name" · "Name | Example" · "Name | Description | Example"
+	function parseBulkLine(line: string): { name: string; description: string; example: string } {
+		const parts = line.split('|').map((p) => p.trim());
+		const name = parts[0] ?? '';
+		if (parts.length >= 3) return { name, description: parts[1], example: parts[2] };
+		if (parts.length === 2) return { name, description: '', example: parts[1] };
+		return { name, description: '', example: '' };
 	}
 
 	const bulkParsed = $derived(
@@ -124,12 +162,12 @@
 
 	function addBulkSkills() {
 		if (!bulkParsed.length) return;
-		for (const { name, example } of bulkParsed) {
+		for (const { name, description, example } of bulkParsed) {
 			store.addSkill({
 				id: crypto.randomUUID(),
 				name,
 				category: bulkCategory.trim() || 'General',
-				description: '',
+				description,
 				example,
 				type: bulkType,
 				unit: bulkUnit.trim(),
@@ -249,16 +287,30 @@
 				{:else if filteredCategories.length === 0}
 					<p class="text-sm text-ctp-overlay0">No skills match "{search}".</p>
 				{:else}
+					<div class="mb-3 flex items-center justify-end">
+						<button onclick={toggleBulkSelectMode} class="text-xs font-medium {bulkSelectMode ? 'text-ctp-overlay0 hover:text-ctp-subtext0' : 'text-ctp-blue hover:text-ctp-lavender'}">
+							{bulkSelectMode ? 'Cancel' : 'Select multiple'}
+						</button>
+					</div>
 					<div class="space-y-3">
 						{#each filteredCategories as cat}
+							{@const idsInCat = skillsInCategory(cat).map((s) => s.id)}
+							{@const allSelected = idsInCat.length > 0 && idsInCat.every((id) => selectedForDelete.has(id))}
 							<div id={catAnchor(cat)} class="scroll-mt-6">
-								<button
-									onclick={() => toggleCat(cat)}
-									class="flex w-full items-center gap-1.5 py-1 text-left text-xs font-semibold uppercase tracking-wide text-ctp-overlay0 hover:text-ctp-subtext0"
-								>
-									<span class="inline-block w-3 text-ctp-overlay0/70">{isExpanded(cat) ? '▾' : '▸'}</span>
-									{cat} <span class="text-ctp-overlay0/60">({skillsInCategory(cat).length})</span>
-								</button>
+								<div class="flex items-center justify-between gap-2">
+									<button
+										onclick={() => toggleCat(cat)}
+										class="flex flex-1 items-center gap-1.5 py-1 text-left text-xs font-semibold uppercase tracking-wide text-ctp-overlay0 hover:text-ctp-subtext0"
+									>
+										<span class="inline-block w-3 text-ctp-overlay0/70">{isExpanded(cat) ? '▾' : '▸'}</span>
+										{cat} <span class="text-ctp-overlay0/60">({skillsInCategory(cat).length})</span>
+									</button>
+									{#if bulkSelectMode}
+										<button onclick={() => toggleSelectAllForDeleteInCategory(cat)} class="shrink-0 text-xs text-ctp-blue hover:text-ctp-lavender">
+											{allSelected ? 'Clear' : 'Select all'}
+										</button>
+									{/if}
+								</div>
 								{#if isExpanded(cat)}
 									<div class="mt-1.5 space-y-1.5 pl-4">
 										{#each skillsInCategory(cat) as skill}
@@ -310,21 +362,33 @@
 											</div>
 										{:else}
 											<div class="flex items-start justify-between gap-3">
-												<div>
-													<div class="flex items-center gap-2">
-														<span class="text-sm text-ctp-text">{skill.name}</span>
-														<span class="rounded-full bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-overlay0">
-															{TYPE_LABELS[skill.type]}{skill.unit ? ` · ${skill.unit}${skill.higherIsBetter ? ' ↑' : ' ↓'}` : ''}
-														</span>
+												<label class="flex flex-1 items-start gap-2 {bulkSelectMode ? 'cursor-pointer' : ''}">
+													{#if bulkSelectMode}
+														<input
+															type="checkbox"
+															checked={selectedForDelete.has(skill.id)}
+															onchange={() => toggleSelectForDelete(skill.id)}
+															class="mt-0.5 shrink-0 rounded"
+														/>
+													{/if}
+													<div>
+														<div class="flex items-center gap-2">
+															<span class="text-sm text-ctp-text">{skill.name}</span>
+															<span class="rounded-full bg-ctp-surface1 px-2 py-0.5 text-xs text-ctp-overlay0">
+																{TYPE_LABELS[skill.type]}{skill.unit ? ` · ${skill.unit}${skill.higherIsBetter ? ' ↑' : ' ↓'}` : ''}
+															</span>
+														</div>
+														{#if skill.description}
+															<p class="mt-0.5 whitespace-pre-wrap text-xs text-ctp-subtext0">{skill.description}</p>
+														{/if}
+														{#if skill.example}
+															<p class="mt-0.5 text-xs italic text-ctp-overlay0">Example: {skill.example}</p>
+														{/if}
 													</div>
-													{#if skill.description}
-														<p class="mt-0.5 whitespace-pre-wrap text-xs text-ctp-subtext0">{skill.description}</p>
-													{/if}
-													{#if skill.example}
-														<p class="mt-0.5 text-xs text-ctp-overlay0">e.g. <span class="font-mono">{skill.example}</span></p>
-													{/if}
-												</div>
-												<button onclick={() => startEditSkill(skill)} class="shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">Edit</button>
+												</label>
+												{#if !bulkSelectMode}
+													<button onclick={() => startEditSkill(skill)} class="shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">Edit</button>
+												{/if}
 											</div>
 										{/if}
 									</div>
@@ -334,6 +398,19 @@
 						</div>
 					{/each}
 				</div>
+					{#if bulkSelectMode && selectedForDelete.size > 0}
+						<div class="sticky bottom-4 z-10 mt-4 flex items-center gap-3 rounded-lg border border-ctp-red/30 bg-ctp-mantle px-4 py-3 shadow-lg">
+							{#if confirmBulkDelete}
+								<span class="text-sm text-ctp-red">Delete {selectedForDelete.size} skill{selectedForDelete.size === 1 ? '' : 's'}? This also removes them from any student they're assigned to.</span>
+								<button onclick={confirmDeleteSelected} class="ml-auto shrink-0 rounded bg-ctp-red px-3 py-1.5 text-xs font-medium text-ctp-crust hover:opacity-90">Confirm delete</button>
+								<button onclick={() => (confirmBulkDelete = false)} class="shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+							{:else}
+								<span class="text-sm text-ctp-text">{selectedForDelete.size} skill{selectedForDelete.size === 1 ? '' : 's'} selected</span>
+								<button onclick={() => (confirmBulkDelete = true)} class="ml-auto shrink-0 rounded bg-ctp-red/90 px-3 py-1.5 text-xs font-medium text-ctp-crust hover:opacity-90">Delete selected</button>
+								<button onclick={toggleBulkSelectMode} class="shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+							{/if}
+						</div>
+					{/if}
 			{/if}
 		</section>
 
@@ -393,8 +470,16 @@
 			{:else}
 				<div class="space-y-2">
 					<p class="text-xs text-ctp-subtext0">
-						Paste one skill per line — great for adding a whole curriculum list (e.g. all 2nd grade math skills) at once. Add an example after a "|" if you want one (e.g. "Rounding to nearest ten | 97 → 100"). They'll all share the same category and type below; you can fine-tune individual skills afterward.
+						Paste one skill per line — perfect for a whole curriculum list (e.g. all 2nd grade math skills) at once. They'll all share the same category and type below; fine-tune individual skills afterward.
 					</p>
+					<div class="rounded-lg border border-ctp-surface1 bg-ctp-mantle px-3 py-2 text-xs">
+						<p class="mb-1.5 text-ctp-subtext0">Add more detail to a line by separating with "|":</p>
+						<div class="space-y-1 text-ctp-overlay0">
+							<p><span class="text-ctp-subtext1">Just a name:</span> Skip counting by 5s</p>
+							<p><span class="text-ctp-subtext1">+ an example:</span> Skip counting by 5s | 5, 10, 15, 20…</p>
+							<p><span class="text-ctp-subtext1">+ a description too:</span> Skip counting by 5s | Count up by 5s starting from any number | 5, 10, 15, 20…</p>
+						</div>
+					</div>
 					<div class="grid grid-cols-2 gap-2">
 						<input bind:value={bulkCategory} class={inputClass} placeholder="Category (e.g. Math — 2nd Grade)" />
 						<div class="flex items-center gap-2">
@@ -425,7 +510,7 @@
 						bind:value={bulkNames}
 						rows="8"
 						class="{inputClass} resize-y font-mono"
-						placeholder={'Writing numbers in expanded form | 518 = 500+10+8\nRounding to nearest ten | 97 → 100\nRounding to nearest hundred\nAdding/subtracting mentally\nDivision facts'}
+						placeholder={'Writing numbers in expanded form | Break a number into place values | 518 = 500+10+8\nRounding to nearest ten | 97 → 100\nRounding to nearest hundred\nAdding/subtracting mentally\nDivision facts'}
 					></textarea>
 					<div class="flex items-center gap-3">
 						<button onclick={addBulkSkills} class="rounded bg-ctp-blue px-3 py-1.5 text-xs font-medium text-ctp-crust hover:opacity-90 transition-opacity">

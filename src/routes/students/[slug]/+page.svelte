@@ -1591,7 +1591,7 @@
 												<p class="mt-2 whitespace-pre-wrap text-xs text-ctp-subtext0">{skillDef.description}</p>
 											{/if}
 											{#if skillDef.example}
-												<p class="mt-1 text-xs text-ctp-overlay0">e.g. <span class="font-mono">{skillDef.example}</span></p>
+												<p class="mt-1 text-xs italic text-ctp-overlay0">Example: {skillDef.example}</p>
 											{/if}
 
 											<!-- Per-student notes -->

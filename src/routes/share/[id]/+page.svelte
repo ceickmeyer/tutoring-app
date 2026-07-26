@@ -114,14 +114,14 @@
 												{/if}
 
 												{#if def.description}
-													<p class="mt-2 whitespace-pre-wrap text-xs text-ctp-subtext0">{def.description}</p>
+													<p class="mt-2 whitespace-pre-wrap text-sm text-ctp-subtext0">{def.description}</p>
 												{/if}
 												{#if def.example}
-													<p class="mt-1 text-xs text-ctp-overlay0">e.g. <span class="font-mono">{def.example}</span></p>
+													<p class="mt-1.5 text-sm text-ctp-overlay0"><span class="font-medium text-ctp-subtext1">Example:</span> {def.example}</p>
 												{/if}
 												{#if sk.notes}
-													<div class="mt-2 rounded bg-ctp-yellow/10 px-2 py-1.5">
-														<p class="whitespace-pre-wrap text-xs text-ctp-subtext1">{sk.notes}</p>
+													<div class="mt-2 rounded bg-ctp-yellow/10 px-2.5 py-2">
+														<p class="whitespace-pre-wrap text-sm text-ctp-subtext1">{sk.notes}</p>
 													</div>
 												{/if}
 											</div>
