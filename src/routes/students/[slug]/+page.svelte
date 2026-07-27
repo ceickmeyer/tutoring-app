@@ -6,7 +6,8 @@
 	import { supabase } from '$lib/supabase';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
-	import type { BigProject, Day, SkillStatus, Student } from '$lib/types';
+	import type { BigProject, Day, SkillBankItem, SkillStatus, Student, StudentSkill } from '$lib/types';
+	import { computeSkillStatus, SKILL_STATUS_LABEL } from '$lib/skillStatus';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -355,6 +356,62 @@
 		setTimeout(() => {
 			if (copied === key) copied = null;
 		}, 1500);
+	}
+
+	// ── AI-friendly skills summary ─────────────────────────────────
+	function aiStatusLabel(def: SkillBankItem, sk: StudentSkill): string {
+		return SKILL_STATUS_LABEL[computeSkillStatus(def, sk)];
+	}
+
+	function buildAiSkillsSummary(): string {
+		if (!student) return '';
+		const lines: string[] = [`# ${student.name} — Skills Summary`, ''];
+
+		for (const cat of assignedCategories) {
+			lines.push(`## ${cat}`);
+			const catSkills = student.skills.filter(
+				(sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category === cat
+			);
+			for (const sk of catSkills) {
+				const def = store.skillBank.find((b) => b.id === sk.skillId);
+				if (!def) continue;
+				lines.push(`- ${def.name} — **${aiStatusLabel(def, sk)}**`);
+
+				if (def.type === 'scored') {
+					const last = sk.entries.at(-1);
+					if (last) {
+						const goalStr = def.goal !== undefined ? ` (goal: ${def.goal}${def.unit ? ' ' + def.unit : ''})` : '';
+						lines.push(`  Last result: ${last.value}${def.unit ? ' ' + def.unit : ''}${goalStr}`);
+					}
+				} else if (def.type === 'multi') {
+					for (const item of def.items ?? []) {
+						const last = (sk.itemEntries?.[item] ?? []).at(-1);
+						if (!last) {
+							lines.push(`  - ${item}: not started`);
+						} else {
+							const met =
+								def.goal !== undefined &&
+								(def.higherIsBetter ? last.value >= def.goal : last.value <= def.goal);
+							const goalStr = def.goal !== undefined ? ` (goal: ${def.goal}${def.unit ? ' ' + def.unit : ''})` : '';
+							lines.push(`  - ${item}: ${last.value}${def.unit ? ' ' + def.unit : ''}${goalStr}${met ? ' ✓' : ''}`);
+						}
+					}
+				}
+
+				if (def.description) lines.push(`  ${def.description}`);
+				if (def.example) lines.push(`  Example: ${def.example}`);
+				if (sk.notes) lines.push(`  Note: ${sk.notes}`);
+			}
+			lines.push('');
+		}
+
+		return lines.join('\n').trim();
+	}
+
+	async function copySkillsForAI() {
+		const text = buildAiSkillsSummary();
+		if (!text) return;
+		await copy(text, 'ai-skills');
 	}
 
 	// ── Password reveal ──────────────────────────────────────────
@@ -1337,6 +1394,15 @@
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Skills</h2>
+					<div class="flex items-center gap-3">
+						{#if !editMode && s.skills.length > 0}
+							<button
+								onclick={copySkillsForAI}
+								class="text-xs font-medium transition-colors {copied === 'ai-skills' ? 'text-ctp-green' : 'text-ctp-overlay0 hover:text-ctp-subtext0'}"
+							>
+								{copied === 'ai-skills' ? '✓ Copied' : 'Copy for AI'}
+							</button>
+						{/if}
 					{#if !editMode && store.skillBank.length > 0}
 						<div class="relative">
 							{#if showAssignSkill}
@@ -1396,6 +1462,7 @@
 							>+ Assign skill</button>
 						</div>
 					{/if}
+					</div>
 				</div>
 
 				{#if !student || s.skills.length === 0}

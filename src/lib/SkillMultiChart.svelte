@@ -7,14 +7,24 @@
 		itemEntries,
 		goal,
 		unit = '',
-		higherIsBetter = true
+		higherIsBetter = true,
+		light = false
 	}: {
 		items: string[];
 		itemEntries: Record<string, SkillEntry[]>;
 		goal?: number;
 		unit?: string;
 		higherIsBetter?: boolean;
+		light?: boolean;
 	} = $props();
+
+	const gridColor = $derived(light ? '#e6ddc9' : '#363a4f');
+	const axisTextColor = $derived(light ? '#8a8175' : '#6e738d');
+	const axisLineColor = $derived(light ? '#d8cfba' : '#494d64');
+	const goalLineColor = $derived(light ? '#3f8f5f' : '#a6da95');
+	const dotStroke = $derived(light ? '#ffffff' : '#24273a');
+	const labelBoxFill = $derived(light ? '#ffffff' : '#24273a');
+	const legendTextColor = $derived(light ? '#8a8175' : '#6e738d');
 
 	const W = 580;
 	const ML = 36,
@@ -160,7 +170,7 @@
 </script>
 
 {#if lines.length > 0}
-	<div class="mt-3 overflow-hidden rounded-lg border border-ctp-surface1 bg-ctp-surface0">
+	<div class="mt-3 overflow-hidden rounded-lg border {light ? 'border-[#e6ddc9] bg-white' : 'border-ctp-surface1 bg-ctp-surface0'}">
 		<svg viewBox="0 0 {W} {H}" class="w-full" role="img" aria-label="Skill items progress chart">
 			<!-- Grid lines + Y labels -->
 			{#each yLines as v}
@@ -169,10 +179,10 @@
 					y1={ty(v)}
 					x2={ML + CW}
 					y2={ty(v)}
-					stroke="#363a4f"
+					stroke={gridColor}
 					stroke-width="1"
 				/>
-				<text x={ML - 5} y={ty(v) + 4} text-anchor="end" font-size="9" fill="#6e738d">{v}</text>
+				<text x={ML - 5} y={ty(v) + 4} text-anchor="end" font-size="9" fill={axisTextColor}>{v}</text>
 			{/each}
 
 			<!-- Goal line -->
@@ -182,7 +192,7 @@
 					y1={goalY}
 					x2={ML + CW}
 					y2={goalY}
-					stroke="#a6da95"
+					stroke={goalLineColor}
 					stroke-width="1.5"
 					stroke-dasharray="5 3"
 					opacity="0.8"
@@ -192,14 +202,14 @@
 					y={goalY + 4}
 					text-anchor="end"
 					font-size="9"
-					fill="#a6da95"
+					fill={goalLineColor}
 					font-weight="600">{goal}</text
 				>
 			{/if}
 
 			<!-- Axes -->
-			<line x1={ML} y1={MT} x2={ML} y2={MT + CH} stroke="#494d64" stroke-width="1" />
-			<line x1={ML} y1={MT + CH} x2={ML + CW} y2={MT + CH} stroke="#494d64" stroke-width="1" />
+			<line x1={ML} y1={MT} x2={ML} y2={MT + CH} stroke={axisLineColor} stroke-width="1" />
+			<line x1={ML} y1={MT + CH} x2={ML + CW} y2={MT + CH} stroke={axisLineColor} stroke-width="1" />
 
 			<!-- Item lines and dots -->
 			{#each lines as l}
@@ -222,7 +232,7 @@
 						cy={y}
 						r={l.pts.length === 1 ? 5 : 3.5}
 						fill={l.color}
-						stroke="#24273a"
+						stroke={dotStroke}
 						stroke-width="2"
 						opacity={dim ? 0.12 : 1}
 						style="transition: opacity 0.15s"
@@ -257,7 +267,7 @@
 						width={LABEL_W}
 						height={LABEL_H}
 						rx="3"
-						fill="#24273a"
+						fill={labelBoxFill}
 						stroke={lbl.color}
 						stroke-width="1.5"
 					/>
@@ -276,7 +286,7 @@
 
 			<!-- X axis labels -->
 			{#each xTicks as tick}
-				<text x={tick.x} y={H - 5} text-anchor="middle" font-size="9" fill="#6e738d"
+				<text x={tick.x} y={H - 5} text-anchor="middle" font-size="9" fill={axisTextColor}
 					>{tick.label}</text
 				>
 			{/each}
@@ -285,7 +295,8 @@
 		<!-- Legend for items with no data yet -->
 		{#if items.some((item) => !(itemEntries[item]?.length))}
 			<div
-				class="flex flex-wrap gap-x-4 gap-y-0.5 border-t border-ctp-surface1 px-3 py-1.5 text-xs text-ctp-overlay0"
+				class="flex flex-wrap gap-x-4 gap-y-0.5 border-t {light ? 'border-[#e6ddc9]' : 'border-ctp-surface1'} px-3 py-1.5 text-xs"
+				style="color: {legendTextColor}"
 			>
 				{#each items as item, idx}
 					{#if !(itemEntries[item]?.length)}

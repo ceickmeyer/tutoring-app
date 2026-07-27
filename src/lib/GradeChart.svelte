@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { Course } from './types';
 
-	let { courses }: { courses: Course[] } = $props();
+	let { courses, light = false }: { courses: Course[]; light?: boolean } = $props();
+
+	const gridColor = $derived(light ? '#e6ddc9' : '#363a4f');
+	const axisTextColor = $derived(light ? '#8a8175' : '#6e738d');
+	const axisLineColor = $derived(light ? '#d8cfba' : '#494d64');
+	const dotStroke = $derived(light ? '#ffffff' : '#24273a');
+	const labelBoxFill = $derived(light ? '#ffffff' : '#24273a');
 
 	// SVG canvas layout
 	const W = 820,
@@ -154,24 +160,24 @@
 </script>
 
 {#if lines.length > 0}
-	<div class="overflow-hidden rounded-lg border border-ctp-surface1 bg-ctp-surface0">
+	<div class="overflow-hidden rounded-lg border {light ? 'border-[#e6ddc9] bg-white' : 'border-ctp-surface1 bg-ctp-surface0'}">
 		<svg viewBox="0 0 {W} {H}" class="w-full" role="img" aria-label="Grade history chart">
 			<!-- Horizontal grid lines + Y labels -->
 			{#each yLines as y}
-				<line x1={ML} y1={ty(y)} x2={ML + CW} y2={ty(y)} stroke="#363a4f" stroke-width="1" />
-				<text x={ML - 6} y={ty(y) + 4} text-anchor="end" fill="#6e738d" font-size="10">{y}</text>
+				<line x1={ML} y1={ty(y)} x2={ML + CW} y2={ty(y)} stroke={gridColor} stroke-width="1" />
+				<text x={ML - 6} y={ty(y) + 4} text-anchor="end" fill={axisTextColor} font-size="10">{y}</text>
 			{/each}
 
 			<!-- X axis date labels -->
 			{#each xTicks as tick}
-				<text x={tick.x} y={H - 6} text-anchor="middle" fill="#6e738d" font-size="10"
+				<text x={tick.x} y={H - 6} text-anchor="middle" fill={axisTextColor} font-size="10"
 					>{tick.label}</text
 				>
 			{/each}
 
 			<!-- Axis borders -->
-			<line x1={ML} y1={MT} x2={ML} y2={MT + CH} stroke="#494d64" stroke-width="1" />
-			<line x1={ML} y1={MT + CH} x2={ML + CW} y2={MT + CH} stroke="#494d64" stroke-width="1" />
+			<line x1={ML} y1={MT} x2={ML} y2={MT + CH} stroke={axisLineColor} stroke-width="1" />
+			<line x1={ML} y1={MT + CH} x2={ML + CW} y2={MT + CH} stroke={axisLineColor} stroke-width="1" />
 
 			<!-- Course lines -->
 			{#each lines as line}
@@ -195,7 +201,7 @@
 						cy={y}
 						r={line.pts.length === 1 ? 5 : 3.5}
 						fill={line.color}
-						stroke="#24273a"
+						stroke={dotStroke}
 						stroke-width="2"
 						opacity={dim ? 0.12 : 1}
 						style="transition: opacity 0.15s"
@@ -230,7 +236,7 @@
 						width={LABEL_W}
 						height={LABEL_H}
 						rx="3"
-						fill="#24273a"
+						fill={labelBoxFill}
 						stroke={lbl.color}
 						stroke-width="1.5"
 					/>
@@ -277,9 +283,9 @@
 
 		<!-- Legend -->
 		{#if lines.length > 1}
-			<div class="flex flex-wrap gap-x-5 gap-y-1 border-t border-ctp-surface1 px-4 py-2.5">
+			<div class="flex flex-wrap gap-x-5 gap-y-1 border-t {light ? 'border-[#e6ddc9] text-[#6b6259]' : 'border-ctp-surface1 text-ctp-subtext1'} px-4 py-2.5 text-xs">
 				{#each lines as line}
-					<span class="flex items-center gap-1.5 text-xs text-ctp-subtext1">
+					<span class="flex items-center gap-1.5">
 						<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{line.color}"></span>
 						{line.name}
 					</span>

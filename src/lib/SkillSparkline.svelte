@@ -5,13 +5,21 @@
 		entries,
 		goal,
 		unit = '',
-		higherIsBetter = true
+		higherIsBetter = true,
+		light = false
 	}: {
 		entries: SkillEntry[];
 		goal?: number;
 		unit?: string;
 		higherIsBetter?: boolean;
+		light?: boolean;
 	} = $props();
+
+	const axisTextColor = $derived(light ? '#8a8175' : '#6e738d');
+	const dotStroke = $derived(light ? '#ffffff' : '#1e2030');
+	const lineColorMet = $derived(light ? '#3f8f5f' : '#a6da95');
+	const lineColorNotMet = $derived(light ? '#4472a8' : '#8aadf4');
+	const goalLineColor = $derived(light ? '#3f8f5f' : '#a6da95');
 
 	const W = 420,
 		H = 88;
@@ -66,7 +74,7 @@
 			.join(' ');
 	}
 
-	const lineColor = $derived(goalMet ? '#a6da95' : '#8aadf4');
+	const lineColor = $derived(goalMet ? lineColorMet : lineColorNotMet);
 
 	const xLabels = $derived.by(() => {
 		if (sorted.length === 0) return [];
@@ -101,7 +109,7 @@
 </script>
 
 {#if sorted.length > 0}
-	<div class="mt-3 overflow-hidden rounded-lg border border-ctp-surface1 bg-ctp-mantle">
+	<div class="mt-3 overflow-hidden rounded-lg border {light ? 'border-[#e6ddc9] bg-white' : 'border-ctp-surface1 bg-ctp-mantle'}">
 		<svg viewBox="0 0 {W} {H}" class="w-full" role="img" aria-label="Skill progress chart">
 			<!-- Current value label (left axis, at last dot) -->
 			{#if pts.length > 0}
@@ -123,15 +131,15 @@
 					y1={goalY}
 					x2={ML + CW}
 					y2={goalY}
-					stroke="#a6da95"
+					stroke={goalLineColor}
 					stroke-width="1.5"
 					stroke-dasharray="5 3"
 					opacity="0.75"
 				/>
-				<text x={ML + CW + 5} y={goalLabelY - 1} font-size="9" fill="#a6da95" font-weight="600"
+				<text x={ML + CW + 5} y={goalLabelY - 1} font-size="9" fill={goalLineColor} font-weight="600"
 					>goal</text
 				>
-				<text x={ML + CW + 5} y={goalLabelY + 9} font-size="9" fill="#a6da95">{fmt(goal)}</text>
+				<text x={ML + CW + 5} y={goalLabelY + 9} font-size="9" fill={goalLineColor}>{fmt(goal)}</text>
 			{/if}
 
 			<!-- Trend line -->
@@ -153,14 +161,14 @@
 					cy={y}
 					r={pts.length === 1 ? 5 : 3.5}
 					fill={lineColor}
-					stroke="#1e2030"
+					stroke={dotStroke}
 					stroke-width="2"
 				/>
 			{/each}
 
 			<!-- X axis date labels -->
 			{#each xLabels as tick}
-				<text x={tick.x} y={H - 3} text-anchor="middle" font-size="9" fill="#6e738d"
+				<text x={tick.x} y={H - 3} text-anchor="middle" font-size="9" fill={axisTextColor}
 					>{tick.label}</text
 				>
 			{/each}
@@ -172,7 +180,7 @@
 					y={MT + 11}
 					text-anchor="middle"
 					font-size="10"
-					fill="#a6da95"
+					fill={goalLineColor}
 					font-weight="700"
 				>★ Goal reached!</text>
 			{/if}
