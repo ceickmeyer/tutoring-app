@@ -93,12 +93,20 @@ export interface SkillEntry {
 	value: number;
 }
 
+export interface StatusChangeEntry {
+	date: string; // ISO datetime (includes time — status can change more than once a day)
+	from: SkillStatus;
+	to: SkillStatus;
+	by: 'tutor' | 'family';
+}
+
 export interface StudentSkill {
 	skillId: string;
 	status: SkillStatus;
 	entries: SkillEntry[];
 	itemEntries?: Record<string, SkillEntry[]>; // for 'multi' type: item name → entries
 	notes?: string; // student-specific notes for this skill
+	statusHistory?: StatusChangeEntry[]; // tutor-only log of status changes; never sent to the share page
 }
 
 export interface Student {

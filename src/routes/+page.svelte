@@ -229,7 +229,7 @@
 		<div>
 			<h1 class="text-xl font-semibold text-ctp-text">My Students</h1>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex items-center gap-1">
 			<button
 				onclick={() => (todayFirst = !todayFirst)}
 				class="rounded px-3 py-1.5 text-sm transition-colors {todayFirst
@@ -239,6 +239,9 @@
 			>
 				{DAY_ABBR[TODAY]} first
 			</button>
+
+			<span class="mx-2 h-5 w-px bg-ctp-surface2"></span>
+
 			<a
 				href="/skills"
 				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
@@ -246,28 +249,34 @@
 				Skill Bank
 			</a>
 			<button
+				onclick={() => (showImport = true)}
+				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
+			>
+				Import
+			</button>
+			<button
 				onclick={exportBackup}
 				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
 			>
 				Export
 			</button>
-			<button
-				onclick={() => supabase.auth.signOut()}
-				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
-			>
-				Sign out
-			</button>
-			<button
-				onclick={() => (showImport = true)}
-				class="rounded px-3 py-1.5 text-sm text-ctp-subtext0 transition-colors hover:bg-ctp-surface0 hover:text-ctp-text"
-			>
-				Import
-			</button>
+
+			<span class="mx-2 h-5 w-px bg-ctp-surface2"></span>
+
 			<button
 				onclick={() => (showAdd = true)}
 				class="rounded bg-ctp-blue px-3 py-1.5 text-sm font-medium text-ctp-crust transition-colors hover:opacity-90"
 			>
 				+ Add Student
+			</button>
+
+			<span class="mx-2 h-5 w-px bg-ctp-surface2"></span>
+
+			<button
+				onclick={() => supabase.auth.signOut()}
+				class="rounded px-3 py-1.5 text-sm text-ctp-overlay0/70 transition-colors hover:bg-ctp-surface0 hover:text-ctp-subtext0"
+			>
+				Sign out
 			</button>
 		</div>
 	</header>

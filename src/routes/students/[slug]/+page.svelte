@@ -6,7 +6,7 @@
 	import { supabase } from '$lib/supabase';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
-	import type { BigProject, Day, SkillBankItem, SkillStatus, Student, StudentSkill } from '$lib/types';
+	import type { BigProject, Day, SkillBankItem, SkillStatus, StatusChangeEntry, Student, StudentSkill } from '$lib/types';
 	import { computeSkillStatus, SKILL_STATUS_LABEL } from '$lib/skillStatus';
 
 	const WEEK_DAYS: Day[] = [
@@ -103,6 +103,14 @@
 	let expandedMultiHistory = $state<Set<string>>(new Set());
 	let editingSkillNotes = $state<string | null>(null);
 	let skillNotesInput = $state('');
+	let expandedStatusHistory = $state<Set<string>>(new Set());
+
+	function toggleStatusHistory(skillId: string) {
+		const next = new Set(expandedStatusHistory);
+		if (next.has(skillId)) next.delete(skillId);
+		else next.add(skillId);
+		expandedStatusHistory = next;
+	}
 
 	function toggleHistory(skillId: string) {
 		const next = new Set(expandedHistory);
@@ -276,7 +284,11 @@
 		if (!student) return;
 		store.update(student.id, {
 			...student,
-			skills: student.skills.map((sk) => sk.skillId === skillId ? { ...sk, status } : sk)
+			skills: student.skills.map((sk) => {
+				if (sk.skillId !== skillId || sk.status === status) return sk;
+				const entry: StatusChangeEntry = { date: new Date().toISOString(), from: sk.status, to: status, by: 'tutor' };
+				return { ...sk, status, statusHistory: [...(sk.statusHistory ?? []), entry] };
+			})
 		});
 	}
 
@@ -614,20 +626,15 @@
 
 	async function copyShareLink() {
 		if (!student) return;
+		const {
+			data: { session }
+		} = await supabase.auth.getSession();
+		if (!session) return;
 		const id = crypto.randomUUID();
-		const skillDefs = student.skills
-			.map((sk) => store.skillBank.find((b) => b.id === sk.skillId))
-			.filter((b): b is NonNullable<typeof b> => !!b);
 		const { error } = await supabase.from('public_shares').insert({
 			id,
-			data: {
-				name: student.name,
-				color: student.color,
-				courses: student.courses,
-				projects: student.projects,
-				skills: student.skills,
-				skillDefs
-			}
+			user_id: session.user.id,
+			student_id: student.id
 		});
 		if (error) {
 			shareError = true;
@@ -680,7 +687,11 @@
 		<header class="border-b border-ctp-surface0 bg-ctp-mantle px-6 py-4">
 			<div class="mx-auto max-w-3xl">
 				<div class="mb-3 flex items-center justify-between">
-					<a href="/" class="text-sm text-ctp-subtext0 hover:text-ctp-text">← Students</a>
+					<div class="flex items-center gap-3">
+						<a href="/" class="text-sm text-ctp-subtext0 hover:text-ctp-text">← Students</a>
+						<span class="h-4 w-px bg-ctp-surface2"></span>
+						<a href="/skills" class="text-sm text-ctp-subtext0 hover:text-ctp-text">Skill Bank</a>
+					</div>
 					<div class="flex gap-2">
 						{#if editMode}
 							<button
@@ -1494,6 +1505,27 @@
 															>{STATUS_LABELS[st as SkillStatus]}</button>
 														{/each}
 													</div>
+
+													<!-- Status change log (tutor-only) -->
+													{#if (sk.statusHistory ?? []).length > 0}
+														<button onclick={() => toggleStatusHistory(sk.skillId)} class="mt-2 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">
+															{expandedStatusHistory.has(sk.skillId) ? '▾' : '▸'} Status log ({(sk.statusHistory ?? []).length})
+														</button>
+														{#if expandedStatusHistory.has(sk.skillId)}
+															<div class="mt-1 space-y-1">
+																{#each [...(sk.statusHistory ?? [])].reverse() as change}
+																	<div class="flex flex-wrap items-center gap-1.5 text-xs text-ctp-overlay0">
+																		<span>{new Date(change.date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+																		<span>·</span>
+																		<span class="text-ctp-subtext1">{STATUS_LABELS[change.from]} → {STATUS_LABELS[change.to]}</span>
+																		<span class="rounded-full px-1.5 py-0.5 text-[10px] font-medium {change.by === 'family' ? 'bg-ctp-mauve/20 text-ctp-mauve' : 'bg-ctp-surface1 text-ctp-overlay1'}">
+																			{change.by === 'family' ? 'Family' : 'You'}
+																		</span>
+																	</div>
+																{/each}
+															</div>
+														{/if}
+													{/if}
 
 												{:else if skillDef.type === 'scored'}
 													<!-- Scored: sparkline + log -->

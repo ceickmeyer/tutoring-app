@@ -12,12 +12,12 @@ export interface ShareData {
 }
 
 export const load: PageLoad = async ({ params }) => {
-	const { data, error } = await supabase
-		.from('public_shares')
-		.select('data')
-		.eq('id', params.id)
-		.single();
+	const { data, error } = await supabase.rpc('get_shared_student', { p_share_id: params.id });
 
-	if (error || !data) return { shareData: null };
-	return { shareData: data.data as ShareData };
+	if (error) {
+		console.error('get_shared_student failed:', error.message, error.details, error.hint);
+		return { shareData: null, shareId: params.id };
+	}
+	if (!data) return { shareData: null, shareId: params.id };
+	return { shareData: data as ShareData, shareId: params.id };
 };

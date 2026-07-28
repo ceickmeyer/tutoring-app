@@ -2,11 +2,18 @@
 	import GradeChart from '$lib/GradeChart.svelte';
 	import SkillSparkline from '$lib/SkillSparkline.svelte';
 	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
+	import { supabase } from '$lib/supabase';
 	import { computeSkillStatus, SKILL_STATUS_LABEL, type SkillStatusKind } from '$lib/skillStatus';
+	import type { SkillStatus } from '$lib/types';
 	import type { ShareData } from './+page';
 
 	let { data } = $props();
-	const s = $derived(data.shareData as ShareData | null);
+
+	let s = $state<ShareData | null>(null);
+	$effect(() => {
+		s = data.shareData as ShareData | null;
+	});
+
 	const activeCourses = $derived(s?.courses.filter((c) => c.entries.length > 0) ?? []);
 
 	const today = new Date().toLocaleDateString('en-US', {
@@ -21,18 +28,70 @@
 		not_started: '○'
 	};
 
+	const STATUS_OPTIONS: SkillStatus[] = ['not_started', 'working', 'mastered'];
+
+	// ── Family-editable status ──────────────────────────────────────
+	let openSkillId = $state<string | null>(null);
+	let pendingChange = $state<{ skillId: string; status: SkillStatus } | null>(null);
+	let saving = $state(false);
+	let saveError = $state<string | null>(null);
+
+	function startEditStatus(skillId: string) {
+		openSkillId = skillId;
+		pendingChange = null;
+		saveError = null;
+	}
+
+	function cancelEditStatus() {
+		openSkillId = null;
+		pendingChange = null;
+		saveError = null;
+	}
+
+	function pickStatus(skillId: string, status: SkillStatus) {
+		pendingChange = { skillId, status };
+		saveError = null;
+	}
+
+	async function confirmStatusChange() {
+		if (!pendingChange || !s) return;
+		const { skillId, status } = pendingChange;
+		saving = true;
+		saveError = null;
+		const { error } = await supabase.rpc('update_shared_skill_status', {
+			p_share_id: data.shareId,
+			p_skill_id: skillId,
+			p_new_status: status
+		});
+		saving = false;
+		if (error) {
+			saveError = "Couldn't save that — please try again.";
+			return;
+		}
+		s = {
+			...s,
+			skills: (s.skills ?? []).map((sk) => (sk.skillId === skillId ? { ...sk, status } : sk))
+		};
+		openSkillId = null;
+		pendingChange = null;
+	}
+
 	const skillCategories = $derived.by(() => {
-		if (!s?.skills || !s.skillDefs) return [];
-		const cats = s.skills
-			.map((sk) => s.skillDefs!.find((b) => b.id === sk.skillId)?.category)
+		const skills = s?.skills;
+		const skillDefs = s?.skillDefs;
+		if (!skills || !skillDefs) return [];
+		const cats = skills
+			.map((sk) => skillDefs.find((b) => b.id === sk.skillId)?.category)
 			.filter((c): c is string => !!c);
 		return [...new Set(cats)].sort();
 	});
 
 	function skillsInCategory(cat: string) {
-		if (!s?.skills || !s.skillDefs) return [];
-		return s.skills
-			.map((sk) => ({ sk, def: s.skillDefs!.find((b) => b.id === sk.skillId) }))
+		const skills = s?.skills;
+		const skillDefs = s?.skillDefs;
+		if (!skills || !skillDefs) return [];
+		return skills
+			.map((sk) => ({ sk, def: skillDefs.find((b) => b.id === sk.skillId) }))
 			.filter((x) => x.def?.category === cat);
 	}
 
@@ -101,11 +160,50 @@
 												<div class="report-card status-{status}">
 													<div class="flex items-start justify-between gap-3">
 														<span class="text-base font-semibold" style="color: var(--rc-heading)">{def.name}</span>
-														<span class="status-pill status-{status}">
-															<span aria-hidden="true">{STATUS_SYMBOL[status]}</span>
-															{SKILL_STATUS_LABEL[status]}
-														</span>
+														{#if def.type === 'status'}
+															<button
+																class="status-pill status-pill-button status-{status}"
+																onclick={() => startEditStatus(sk.skillId)}
+																disabled={openSkillId === sk.skillId}
+															>
+																<span aria-hidden="true">{STATUS_SYMBOL[status]}</span>
+																{SKILL_STATUS_LABEL[status]}
+															</button>
+														{:else}
+															<span class="status-pill status-{status}">
+																<span aria-hidden="true">{STATUS_SYMBOL[status]}</span>
+																{SKILL_STATUS_LABEL[status]}
+															</span>
+														{/if}
 													</div>
+
+													{#if def.type === 'status' && openSkillId === sk.skillId}
+														<div class="status-editor">
+															{#if pendingChange?.skillId === sk.skillId}
+																<p class="status-editor-text">
+																	Mark as <strong>{SKILL_STATUS_LABEL[pendingChange.status]}</strong>?
+																</p>
+																{#if saveError}<p class="status-editor-error">{saveError}</p>{/if}
+																<div class="status-editor-actions">
+																	<button class="status-btn-confirm" onclick={confirmStatusChange} disabled={saving}>
+																		{saving ? 'Saving…' : 'Confirm'}
+																	</button>
+																	<button class="status-btn-text" onclick={() => (pendingChange = null)} disabled={saving}>Cancel</button>
+																</div>
+															{:else}
+																<p class="status-editor-text">Update status:</p>
+																<div class="status-editor-actions">
+																	{#each STATUS_OPTIONS as opt (opt)}
+																		<button class="status-option status-{opt}" onclick={() => pickStatus(sk.skillId, opt)}>
+																			<span aria-hidden="true">{STATUS_SYMBOL[opt]}</span>
+																			{SKILL_STATUS_LABEL[opt]}
+																		</button>
+																	{/each}
+																	<button class="status-btn-text" onclick={cancelEditStatus}>Cancel</button>
+																</div>
+															{/if}
+														</div>
+													{/if}
 
 													{#if def.type === 'scored'}
 														{@const lastEntry = sk.entries.at(-1)}
@@ -298,5 +396,109 @@
 		background: #fdf6dc;
 		color: #6b5a1e;
 		padding: 0.6rem 0.8rem;
+	}
+
+	.status-pill-button {
+		font-family: inherit;
+		line-height: inherit;
+		cursor: pointer;
+		transition: filter 0.15s;
+	}
+	.status-pill-button:hover:not(:disabled) {
+		filter: brightness(0.97) saturate(1.1);
+	}
+	.status-pill-button:disabled {
+		cursor: default;
+		opacity: 0.6;
+	}
+
+	.status-editor {
+		margin-top: 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px dashed var(--rc-border);
+		background: rgba(46, 42, 36, 0.02);
+		padding: 0.75rem 0.85rem;
+	}
+
+	.status-editor-text {
+		margin: 0 0 0.5rem;
+		font-size: 0.85rem;
+		color: var(--rc-text);
+	}
+
+	.status-editor-error {
+		margin: -0.25rem 0 0.5rem;
+		font-size: 0.8rem;
+		color: var(--rc-red-text);
+	}
+
+	.status-editor-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.status-option {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border-radius: 999px;
+		padding: 0.3rem 0.75rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		font-family: inherit;
+		cursor: pointer;
+		border: 1px solid transparent;
+		background: #efe9db;
+		color: var(--rc-text);
+		transition: filter 0.15s;
+	}
+	.status-option:hover {
+		filter: brightness(0.96);
+	}
+	.status-option.status-mastered {
+		background: var(--rc-green-bg);
+		color: var(--rc-green-text);
+		border-color: var(--rc-green-border);
+	}
+	.status-option.status-working {
+		background: var(--rc-orange-bg);
+		color: var(--rc-orange-text);
+		border-color: var(--rc-orange-border);
+	}
+	.status-option.status-not_started {
+		background: var(--rc-red-bg);
+		color: var(--rc-red-text);
+		border-color: var(--rc-red-border);
+	}
+
+	.status-btn-confirm {
+		border-radius: 999px;
+		border: none;
+		background: var(--rc-heading);
+		color: var(--rc-card);
+		font-family: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		padding: 0.35rem 0.9rem;
+		cursor: pointer;
+	}
+	.status-btn-confirm:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.status-btn-text {
+		background: none;
+		border: none;
+		font-family: inherit;
+		font-size: 0.8rem;
+		color: var(--rc-muted);
+		cursor: pointer;
+		padding: 0.35rem 0.4rem;
+	}
+	.status-btn-text:hover:not(:disabled) {
+		color: var(--rc-text);
 	}
 </style>

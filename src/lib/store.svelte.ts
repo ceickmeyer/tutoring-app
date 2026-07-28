@@ -84,7 +84,8 @@ function migrate(s: unknown): Student {
 		skills: (raw.skills ?? []).map((sk: StudentSkill) => ({
 			...sk,
 			itemEntries: sk.itemEntries ?? {},
-			notes: sk.notes ?? ''
+			notes: sk.notes ?? '',
+			statusHistory: sk.statusHistory ?? []
 		})),
 		days: raw.days ?? (raw.day ? [raw.day as Day] : []),
 		hiatus: raw.hiatus ?? false,
