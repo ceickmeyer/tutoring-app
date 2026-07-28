@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { SkillEntry } from './types';
 	import { COURSE_COLORS } from './types';
+	import { darkenForLight } from './color';
 
 	let {
 		items,
@@ -104,6 +105,7 @@
 		const lbls = lines.map((l) => ({
 			item: l.item,
 			color: l.color,
+			textColor: light ? darkenForLight(l.color) : l.color,
 			lastEntry: l.lastEntry,
 			goalMet: l.goalMet,
 			lastX: l.pts[l.pts.length - 1][0],
@@ -276,7 +278,7 @@
 						y={lbl.y + LABEL_H - 5}
 						font-size="11"
 						font-weight="500"
-						fill={lbl.color}
+						fill={lbl.textColor}
 					>
 						{lbl.item}{lbl.lastEntry ? ': ' + lbl.lastEntry.value + (unit ? ' ' + unit : '') : ''}
 						{lbl.goalMet ? ' ★' : ''}

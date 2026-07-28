@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Course } from './types';
+	import { darkenForLight } from './color';
 
 	let { courses, light = false }: { courses: Course[]; light?: boolean } = $props();
 
@@ -95,6 +96,7 @@
 			return {
 				name: l.name,
 				color: l.color,
+				textColor: light ? darkenForLight(l.color) : l.color,
 				grade: l.lastGrade,
 				trend,
 				lastX: l.pts[l.pts.length - 1][0],
@@ -248,7 +250,7 @@
 									fill-rule="evenodd"
 									clip-rule="evenodd"
 									d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
-									fill={lbl.color}
+									fill={lbl.textColor}
 								/>
 							{:else if lbl.trend === 'down'}
 								<g transform="rotate(180, 12, 12)">
@@ -256,24 +258,24 @@
 										fill-rule="evenodd"
 										clip-rule="evenodd"
 										d="M12 7C12.2652 7 12.5196 7.10536 12.7071 7.29289L19.7071 14.2929C20.0976 14.6834 20.0976 15.3166 19.7071 15.7071C19.3166 16.0976 18.6834 16.0976 18.2929 15.7071L12 9.41421L5.70711 15.7071C5.31658 16.0976 4.68342 16.0976 4.29289 15.7071C3.90237 15.3166 3.90237 14.6834 4.29289 14.2929L11.2929 7.29289C11.4804 7.10536 11.7348 7 12 7Z"
-										fill={lbl.color}
+										fill={lbl.textColor}
 									/>
 								</g>
 							{:else}
 								<path
 									d="M3 12L21 12"
-									stroke={lbl.color}
+									stroke={lbl.textColor}
 									stroke-width="2"
 									stroke-linecap="round"
 									stroke-linejoin="round"
 								/>
 							{/if}
 						</g>
-						<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+						<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.textColor}
 							>{lbl.name} – {lbl.grade}%</text
 						>
 					{:else}
-						<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.color}
+						<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.textColor}
 							>{lbl.name} – {lbl.grade}%</text
 						>
 					{/if}
