@@ -32,38 +32,29 @@
 
 	// ── Family-editable status ──────────────────────────────────────
 	let openSkillId = $state<string | null>(null);
-	let pendingChange = $state<{ skillId: string; status: SkillStatus } | null>(null);
-	let saving = $state(false);
+	let savingChange = $state<{ skillId: string; status: SkillStatus } | null>(null);
 	let saveError = $state<string | null>(null);
 
 	function startEditStatus(skillId: string) {
 		openSkillId = skillId;
-		pendingChange = null;
 		saveError = null;
 	}
 
 	function cancelEditStatus() {
 		openSkillId = null;
-		pendingChange = null;
 		saveError = null;
 	}
 
-	function pickStatus(skillId: string, status: SkillStatus) {
-		pendingChange = { skillId, status };
-		saveError = null;
-	}
-
-	async function confirmStatusChange() {
-		if (!pendingChange || !s) return;
-		const { skillId, status } = pendingChange;
-		saving = true;
+	async function pickStatus(skillId: string, status: SkillStatus) {
+		if (!s) return;
+		savingChange = { skillId, status };
 		saveError = null;
 		const { error } = await supabase.rpc('update_shared_skill_status', {
 			p_share_id: data.shareId,
 			p_skill_id: skillId,
 			p_new_status: status
 		});
-		saving = false;
+		savingChange = null;
 		if (error) {
 			saveError = "Couldn't save that — please try again.";
 			return;
@@ -73,7 +64,6 @@
 			skills: (s.skills ?? []).map((sk) => (sk.skillId === skillId ? { ...sk, status } : sk))
 		};
 		openSkillId = null;
-		pendingChange = null;
 	}
 
 	const skillCategories = $derived.by(() => {
@@ -179,29 +169,21 @@
 
 													{#if def.type === 'status' && openSkillId === sk.skillId}
 														<div class="status-editor">
-															{#if pendingChange?.skillId === sk.skillId}
-																<p class="status-editor-text">
-																	Mark as <strong>{SKILL_STATUS_LABEL[pendingChange.status]}</strong>?
-																</p>
-																{#if saveError}<p class="status-editor-error">{saveError}</p>{/if}
-																<div class="status-editor-actions">
-																	<button class="status-btn-confirm" onclick={confirmStatusChange} disabled={saving}>
-																		{saving ? 'Saving…' : 'Confirm'}
+															<p class="status-editor-text">Update status:</p>
+															{#if saveError}<p class="status-editor-error">{saveError}</p>{/if}
+															<div class="status-editor-actions">
+																{#each STATUS_OPTIONS as opt (opt)}
+																	<button
+																		class="status-option status-{opt}"
+																		onclick={() => pickStatus(sk.skillId, opt)}
+																		disabled={savingChange?.skillId === sk.skillId}
+																	>
+																		<span aria-hidden="true">{STATUS_SYMBOL[opt]}</span>
+																		{savingChange?.skillId === sk.skillId && savingChange.status === opt ? 'Saving…' : SKILL_STATUS_LABEL[opt]}
 																	</button>
-																	<button class="status-btn-text" onclick={() => (pendingChange = null)} disabled={saving}>Cancel</button>
-																</div>
-															{:else}
-																<p class="status-editor-text">Update status:</p>
-																<div class="status-editor-actions">
-																	{#each STATUS_OPTIONS as opt (opt)}
-																		<button class="status-option status-{opt}" onclick={() => pickStatus(sk.skillId, opt)}>
-																			<span aria-hidden="true">{STATUS_SYMBOL[opt]}</span>
-																			{SKILL_STATUS_LABEL[opt]}
-																		</button>
-																	{/each}
-																	<button class="status-btn-text" onclick={cancelEditStatus}>Cancel</button>
-																</div>
-															{/if}
+																{/each}
+																<button class="status-btn-text" onclick={cancelEditStatus} disabled={savingChange?.skillId === sk.skillId}>Cancel</button>
+															</div>
 														</div>
 													{/if}
 
@@ -471,22 +453,6 @@
 		background: var(--rc-red-bg);
 		color: var(--rc-red-text);
 		border-color: var(--rc-red-border);
-	}
-
-	.status-btn-confirm {
-		border-radius: 999px;
-		border: none;
-		background: var(--rc-heading);
-		color: var(--rc-card);
-		font-family: inherit;
-		font-size: 0.8rem;
-		font-weight: 600;
-		padding: 0.35rem 0.9rem;
-		cursor: pointer;
-	}
-	.status-btn-confirm:disabled {
-		opacity: 0.6;
-		cursor: default;
 	}
 
 	.status-btn-text {

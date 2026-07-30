@@ -375,12 +375,13 @@
 		return SKILL_STATUS_LABEL[computeSkillStatus(def, sk)];
 	}
 
-	function buildAiSkillsSummary(): string {
+	function buildAiSkillsSummary(categoryFilter?: string): string {
 		if (!student) return '';
-		const lines: string[] = [`# ${student.name} — Skills Summary`, ''];
+		const cats = categoryFilter ? [categoryFilter] : assignedCategories;
+		const lines: string[] = [`# ${student.name} — ${categoryFilter ?? 'Skills Summary'}`, ''];
 
-		for (const cat of assignedCategories) {
-			lines.push(`## ${cat}`);
+		for (const cat of cats) {
+			if (!categoryFilter) lines.push(`## ${cat}`);
 			const catSkills = student.skills.filter(
 				(sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category === cat
 			);
@@ -420,10 +421,10 @@
 		return lines.join('\n').trim();
 	}
 
-	async function copySkillsForAI() {
-		const text = buildAiSkillsSummary();
+	async function copySkillsForAI(category: string) {
+		const text = buildAiSkillsSummary(category);
 		if (!text) return;
-		await copy(text, 'ai-skills');
+		await copy(text, `ai-skills-${category}`);
 	}
 
 	// ── Password reveal ──────────────────────────────────────────
@@ -1406,14 +1407,6 @@
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Skills</h2>
 					<div class="flex items-center gap-3">
-						{#if !editMode && s.skills.length > 0}
-							<button
-								onclick={copySkillsForAI}
-								class="text-xs font-medium transition-colors {copied === 'ai-skills' ? 'text-ctp-green' : 'text-ctp-overlay0 hover:text-ctp-subtext0'}"
-							>
-								{copied === 'ai-skills' ? '✓ Copied' : 'Copy for AI'}
-							</button>
-						{/if}
 					{#if !editMode && store.skillBank.length > 0}
 						<div class="relative">
 							{#if showAssignSkill}
@@ -1484,7 +1477,17 @@
 					<div class="space-y-5">
 						{#each assignedCategories as cat}
 							<div>
-								<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+								<div class="mb-2 flex items-center justify-between">
+									<p class="text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
+									{#if !editMode}
+										<button
+											onclick={() => copySkillsForAI(cat)}
+											class="text-xs font-medium transition-colors {copied === `ai-skills-${cat}` ? 'text-ctp-green' : 'text-ctp-overlay0 hover:text-ctp-subtext0'}"
+										>
+											{copied === `ai-skills-${cat}` ? '✓ Copied' : 'Copy for AI'}
+										</button>
+									{/if}
+								</div>
 								<div class="space-y-2">
 									{#each s.skills.filter((sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category === cat) as sk}
 										{@const skillDef = store.skillBank.find((b) => b.id === sk.skillId)}
