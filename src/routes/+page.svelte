@@ -3,6 +3,7 @@
 	import { supabase } from '$lib/supabase';
 	import { STUDENT_COLORS } from '$lib/types';
 	import type { Day } from '$lib/types';
+	import { getOrCreateShareId, shareUrl } from '$lib/shareLink';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -147,6 +148,18 @@
 		clearTimeout(toastTimer);
 		toast = label;
 		toastTimer = setTimeout(() => (toast = null), 1500);
+	}
+
+	let gradesError = $state<string | null>(null);
+
+	async function copyGradesLink(student: { id: string; name: string }) {
+		const id = await getOrCreateShareId(student.id);
+		if (!id) {
+			gradesError = student.name;
+			setTimeout(() => (gradesError = null), 2000);
+			return;
+		}
+		await copy(shareUrl(id), student.name + ' grades link');
 	}
 
 	function toggleNewDay(day: Day) {
@@ -351,6 +364,15 @@
 							<td class="px-4 py-3 text-xs text-ctp-overlay0">{formatDays(student.days)}</td>
 							<td class="px-4 py-3">
 								<div class="flex gap-1.5">
+									<button
+										onclick={() => copyGradesLink(student)}
+										class="rounded px-2 py-1 text-xs font-medium transition-colors {gradesError ===
+										student.name
+											? 'bg-ctp-red/10 text-ctp-red'
+											: 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'}"
+									>
+										{gradesError === student.name ? 'Failed' : 'Grades'}
+									</button>
 									<button
 										onclick={() => copy(student.schoolUrl, student.name + ' portal')}
 										class="rounded bg-ctp-surface1 px-2 py-1 text-xs font-medium text-ctp-subtext1 transition-colors hover:bg-ctp-surface2"

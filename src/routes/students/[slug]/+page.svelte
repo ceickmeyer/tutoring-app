@@ -6,6 +6,7 @@
 	import { supabase } from '$lib/supabase';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
+	import { getOrCreateShareId, shareUrl } from '$lib/shareLink';
 	import type { BigProject, Day, SkillBankItem, SkillStatus, StatusChangeEntry, Student, StudentSkill } from '$lib/types';
 	import { computeSkillStatus, SKILL_STATUS_LABEL } from '$lib/skillStatus';
 
@@ -627,23 +628,13 @@
 
 	async function copyShareLink() {
 		if (!student) return;
-		const {
-			data: { session }
-		} = await supabase.auth.getSession();
-		if (!session) return;
-		const id = crypto.randomUUID();
-		const { error } = await supabase.from('public_shares').insert({
-			id,
-			user_id: session.user.id,
-			student_id: student.id
-		});
-		if (error) {
+		const id = await getOrCreateShareId(student.id);
+		if (!id) {
 			shareError = true;
 			setTimeout(() => (shareError = false), 2500);
 			return;
 		}
-		const url = `${window.location.origin}/share/${id}`;
-		await navigator.clipboard.writeText(url);
+		await navigator.clipboard.writeText(shareUrl(id));
 		shareCopied = true;
 		setTimeout(() => (shareCopied = false), 2000);
 	}
