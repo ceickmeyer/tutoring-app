@@ -4,6 +4,7 @@
 	import { getOrCreateShareUrl } from '$lib/share';
 	import { STUDENT_COLORS } from '$lib/types';
 	import type { Day } from '$lib/types';
+	import { getOrCreateShareId, shareUrl } from '$lib/shareLink';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -367,6 +368,15 @@
 							<td class="px-4 py-3 text-xs text-ctp-overlay0">{formatDays(student.days)}</td>
 							<td class="px-4 py-3">
 								<div class="flex gap-1.5">
+									<button
+										onclick={() => copyGradesLink(student)}
+										class="rounded px-2 py-1 text-xs font-medium transition-colors {gradesError ===
+										student.name
+											? 'bg-ctp-red/10 text-ctp-red'
+											: 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'}"
+									>
+										{gradesError === student.name ? 'Failed' : 'Grades'}
+									</button>
 									<button
 										onclick={() => copy(student.schoolUrl, student.name + ' portal')}
 										class="rounded bg-ctp-surface1 px-2 py-1 text-xs font-medium text-ctp-subtext1 transition-colors hover:bg-ctp-surface2"
