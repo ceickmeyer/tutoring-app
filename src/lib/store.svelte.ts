@@ -32,6 +32,7 @@ function blank(partial: Partial<Student> & Pick<Student, 'id' | 'name'>): Studen
 		extraLogins: [],
 		courses: [],
 		skills: [] as StudentSkill[],
+		homework: [],
 		hiatus: false,
 		color: colorForId(partial.id),
 		...partial
@@ -81,6 +82,7 @@ function migrate(s: unknown): Student {
 	return {
 		...raw,
 		courses: raw.courses ?? [],
+		homework: raw.homework ?? [],
 		skills: (raw.skills ?? []).map((sk: StudentSkill) => ({
 			...sk,
 			itemEntries: sk.itemEntries ?? {},

@@ -3,11 +3,12 @@
 	import GradeChart from '$lib/GradeChart.svelte';
 	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
 	import SkillSparkline from '$lib/SkillSparkline.svelte';
-	import { supabase } from '$lib/supabase';
+	import { getOrCreateShareUrl } from '$lib/share';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
-	import type { BigProject, Day, SkillBankItem, SkillStatus, StatusChangeEntry, Student, StudentSkill } from '$lib/types';
+	import type { BigProject, Day, HomeworkItem, HomeworkStatus, SkillBankItem, SkillStatus, StatusChangeEntry, StudentSkill } from '$lib/types';
 	import { computeSkillStatus, SKILL_STATUS_LABEL } from '$lib/skillStatus';
+	import { HOMEWORK_STATUS_LABEL, HOMEWORK_STATUS_ORDER } from '$lib/homeworkStatus';
 
 	const WEEK_DAYS: Day[] = [
 		'Monday',
@@ -28,44 +29,39 @@
 		Sunday: 'Sun'
 	};
 
-	function toggleDay(day: Day) {
-		if (!draft) return;
-		draft.days = draft.days.includes(day)
-			? draft.days.filter((d) => d !== day)
-			: [...draft.days, day];
-	}
-
 	const today = new Date().toISOString().slice(0, 10);
 
 	let { data } = $props();
 
 	const student = $derived(store.find(data.slug));
 
-	// ── Edit mode ────────────────────────────────────────────────
-	let editMode = $state(false);
-	let draft = $state<Student | null>(null);
 	let showDeleteConfirm = $state(false);
 	let showResetGradesConfirm = $state(false);
 
-	function startEdit() {
+	// ── Header identity (name/grade/school/days) ──────────────────
+	let editingHeader = $state(false);
+	let headerName = $state('');
+	let headerGrade = $state<number>(0);
+	let headerSchool = $state('');
+	let headerDays = $state<Day[]>([]);
+
+	function startEditHeader() {
 		if (!student) return;
-		draft = JSON.parse(JSON.stringify(student));
-		editMode = true;
+		headerName = student.name;
+		headerGrade = student.grade;
+		headerSchool = student.school;
+		headerDays = [...student.days];
+		editingHeader = true;
 	}
 
-	function cancelEdit() {
-		draft = null;
-		editMode = false;
-		showDeleteConfirm = false;
-		editEntryOpen = null;
+	function toggleHeaderDay(day: Day) {
+		headerDays = headerDays.includes(day) ? headerDays.filter((d) => d !== day) : [...headerDays, day];
 	}
 
-	function saveEdit() {
-		if (!draft) return;
-		store.update(draft.id, draft);
-		editMode = false;
-		draft = null;
-		editEntryOpen = null;
+	function saveHeader() {
+		if (!student) return;
+		store.update(student.id, { ...student, name: headerName.trim(), grade: headerGrade, school: headerSchool.trim(), days: headerDays });
+		editingHeader = false;
 	}
 
 	function deleteStudent() {
@@ -437,29 +433,136 @@
 		revealed = next;
 	}
 
-	// ── Contacts ─────────────────────────────────────────────────
-	function addContact() {
-		if (!draft) return;
-		draft.contacts = [...draft.contacts, { name: '', relationship: '', phone: '', email: '' }];
+	// ── Student contact (phone/email) ─────────────────────────────
+	let editingStudentContact = $state(false);
+	let studentPhoneInput = $state('');
+	let studentEmailInput = $state('');
+
+	function startEditStudentContact() {
+		if (!student) return;
+		studentPhoneInput = student.phone;
+		studentEmailInput = student.email;
+		editingStudentContact = true;
 	}
 
-	function removeContact(i: number) {
-		if (!draft) return;
-		draft.contacts = draft.contacts.filter((_, idx) => idx !== i);
+	function saveStudentContact() {
+		if (!student) return;
+		store.update(student.id, { ...student, phone: studentPhoneInput.trim(), email: studentEmailInput.trim() });
+		editingStudentContact = false;
 	}
 
-	// ── Extra logins ─────────────────────────────────────────────
-	function addExtraLogin() {
-		if (!draft) return;
-		draft.extraLogins = [
-			...draft.extraLogins,
-			{ id: crypto.randomUUID(), site: '', url: '', username: '', password: '' }
-		];
+	// ── Parent/guardian contacts ───────────────────────────────────
+	let inlineContactId = $state<string | null>(null);
+	let inlineContactName = $state('');
+	let inlineContactRelationship = $state('');
+	let inlineContactPhone = $state('');
+	let inlineContactEmail = $state('');
+
+	function addContactInline() {
+		if (!student) return;
+		const newIndex = student.contacts.length;
+		store.update(student.id, {
+			...student,
+			contacts: [...student.contacts, { name: '', relationship: '', phone: '', email: '' }]
+		});
+		inlineContactId = 'idx-' + newIndex;
+		inlineContactName = '';
+		inlineContactRelationship = '';
+		inlineContactPhone = '';
+		inlineContactEmail = '';
 	}
 
-	function removeExtraLogin(id: string) {
-		if (!draft) return;
-		draft.extraLogins = draft.extraLogins.filter((l) => l.id !== id);
+	function startEditContactInline(i: number) {
+		if (!student) return;
+		const c = student.contacts[i];
+		inlineContactId = 'idx-' + i;
+		inlineContactName = c.name;
+		inlineContactRelationship = c.relationship;
+		inlineContactPhone = c.phone;
+		inlineContactEmail = c.email;
+	}
+
+	function saveContactInline(i: number) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			contacts: student.contacts.map((c, idx) =>
+				idx !== i ? c : { name: inlineContactName, relationship: inlineContactRelationship, phone: inlineContactPhone, email: inlineContactEmail }
+			)
+		});
+		inlineContactId = null;
+	}
+
+	function removeContactInline(i: number) {
+		if (!student) return;
+		store.update(student.id, { ...student, contacts: student.contacts.filter((_, idx) => idx !== i) });
+		inlineContactId = null;
+	}
+
+	// ── School login + extra logins ("Logins" section) ─────────────
+	let editingSchoolLogin = $state(false);
+	let schoolLoginUrl = $state('');
+	let schoolLoginUsername = $state('');
+	let schoolLoginPassword = $state('');
+
+	function startEditSchoolLogin() {
+		if (!student) return;
+		schoolLoginUrl = student.schoolUrl;
+		schoolLoginUsername = student.username;
+		schoolLoginPassword = student.password;
+		editingSchoolLogin = true;
+	}
+
+	function saveSchoolLogin() {
+		if (!student) return;
+		store.update(student.id, { ...student, schoolUrl: schoolLoginUrl.trim(), username: schoolLoginUsername.trim(), password: schoolLoginPassword });
+		editingSchoolLogin = false;
+	}
+
+	let inlineLoginId = $state<string | null>(null);
+	let inlineLoginSite = $state('');
+	let inlineLoginUrl = $state('');
+	let inlineLoginUsername = $state('');
+	let inlineLoginPassword = $state('');
+
+	function addExtraLoginInline() {
+		if (!student) return;
+		const id = crypto.randomUUID();
+		store.update(student.id, {
+			...student,
+			extraLogins: [...student.extraLogins, { id, site: '', url: '', username: '', password: '' }]
+		});
+		inlineLoginId = id;
+		inlineLoginSite = '';
+		inlineLoginUrl = '';
+		inlineLoginUsername = '';
+		inlineLoginPassword = '';
+	}
+
+	function startEditExtraLoginInline(login: { id: string; site: string; url: string; username: string; password: string }) {
+		inlineLoginId = login.id;
+		inlineLoginSite = login.site;
+		inlineLoginUrl = login.url;
+		inlineLoginUsername = login.username;
+		inlineLoginPassword = login.password;
+	}
+
+	function saveExtraLoginInline() {
+		if (!student || !inlineLoginId) return;
+		const id = inlineLoginId;
+		store.update(student.id, {
+			...student,
+			extraLogins: student.extraLogins.map((l) =>
+				l.id !== id ? l : { ...l, site: inlineLoginSite, url: inlineLoginUrl, username: inlineLoginUsername, password: inlineLoginPassword }
+			)
+		});
+		inlineLoginId = null;
+	}
+
+	function removeExtraLoginInline(id: string) {
+		if (!student) return;
+		store.update(student.id, { ...student, extraLogins: student.extraLogins.filter((l) => l.id !== id) });
+		if (inlineLoginId === id) inlineLoginId = null;
 	}
 
 	// ── Grades: view-mode logging (saves immediately) ────────────
@@ -492,61 +595,67 @@
 		activeCourseLog = null;
 	}
 
-	// ── Grades: edit-mode course management ──────────────────────
-	function addCourse() {
-		if (!draft) return;
-		draft.courses = [
-			...draft.courses,
-			{
-				id: crypto.randomUUID(),
-				name: '',
-				color: COURSE_COLORS[draft.courses.length % COURSE_COLORS.length],
-				entries: []
-			}
-		];
+	// ── Grades: course management (inline) ────────────────────────
+	let inlineCourseId = $state<string | null>(null);
+	let inlineCourseName = $state('');
+
+	function addCourseInline() {
+		if (!student) return;
+		const id = crypto.randomUUID();
+		store.update(student.id, {
+			...student,
+			courses: [
+				...student.courses,
+				{ id, name: '', color: COURSE_COLORS[student.courses.length % COURSE_COLORS.length], entries: [] }
+			]
+		});
+		inlineCourseId = id;
+		inlineCourseName = '';
+	}
+
+	function startEditCourseInline(course: { id: string; name: string }) {
+		inlineCourseId = course.id;
+		inlineCourseName = course.name;
+	}
+
+	function saveCourseInline() {
+		if (!student || !inlineCourseId) return;
+		const id = inlineCourseId;
+		store.update(student.id, {
+			...student,
+			courses: student.courses.map((c) => (c.id !== id ? c : { ...c, name: inlineCourseName }))
+		});
+		inlineCourseId = null;
 	}
 
 	function removeCourse(id: string) {
-		if (!draft) return;
-		draft.courses = draft.courses.filter((c) => c.id !== id);
+		if (!student) return;
+		store.update(student.id, { ...student, courses: student.courses.filter((c) => c.id !== id) });
+		if (inlineCourseId === id) inlineCourseId = null;
 	}
 
 	function removeGradeEntry(courseId: string, entryIdx: number) {
-		if (!draft) return;
-		draft.courses = draft.courses.map((c) =>
-			c.id === courseId ? { ...c, entries: c.entries.filter((_, i) => i !== entryIdx) } : c
-		);
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			courses: student.courses.map((c) =>
+				c.id === courseId ? { ...c, entries: c.entries.filter((_, i) => i !== entryIdx) } : c
+			)
+		});
 	}
 
-	// ── Grades: edit-mode per-course entry form ───────────────────
-	let editEntryOpen = $state<string | null>(null);
-	let editEntryDate = $state(today);
-	let editEntryGrade = $state<number>(0);
+	let expandedCourseHistory = $state<Set<string>>(new Set());
 
-	function openEditEntry(courseId: string) {
-		editEntryOpen = courseId;
-		editEntryDate = today;
-		editEntryGrade = 0;
+	function toggleCourseHistory(courseId: string) {
+		const next = new Set(expandedCourseHistory);
+		if (next.has(courseId)) next.delete(courseId);
+		else next.add(courseId);
+		expandedCourseHistory = next;
 	}
 
 	function autoselect(node: HTMLInputElement) {
 		node.focus();
 		node.select();
-	}
-
-	function submitEditEntry() {
-		if (!draft || !editEntryOpen || isNaN(editEntryGrade)) return;
-		draft.courses = draft.courses.map((c) =>
-			c.id === editEntryOpen
-				? {
-						...c,
-						entries: [...c.entries, { date: editEntryDate, grade: editEntryGrade }].sort((a, b) =>
-							a.date.localeCompare(b.date)
-						)
-					}
-				: c
-		);
-		editEntryOpen = null;
 	}
 
 	// ── Big projects ─────────────────────────────────────────────
@@ -557,17 +666,95 @@
 	let editingNotes = $state(false);
 	let notesInput = $state('');
 
-	function addProject() {
-		if (!draft) return;
-		draft.projects = [
-			...draft.projects,
-			{ id: crypto.randomUUID(), title: '', startDate: today, dueDate: today }
-		];
+	// ── Homework ─────────────────────────────────────────────────
+	let inlineHomeworkId = $state<string | null>(null);
+	let inlineHomeworkTitle = $state('');
+	let inlineHomeworkDue = $state(today);
+	let inlineHomeworkCourseId = $state('');
+	let inlineHomeworkNotes = $state('');
+
+	const HOMEWORK_STATUS_ACTIVE: Record<HomeworkStatus, string> = {
+		not_started: 'bg-ctp-surface2 text-ctp-subtext1',
+		working: 'bg-ctp-yellow/20 text-ctp-yellow border border-ctp-yellow/30',
+		completed: 'bg-ctp-green/20 text-ctp-green border border-ctp-green/30'
+	};
+
+	function homeworkUrgencyBorder(hw: HomeworkItem): string {
+		if (hw.status === 'completed') return 'border-l-ctp-green/60';
+		if (!hw.dueDate) return 'border-l-ctp-surface1';
+		if (hw.dueDate < today) return 'border-l-ctp-red';
+		const daysLeft = Math.ceil((new Date(hw.dueDate + 'T00:00:00').getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+		if (daysLeft <= 1) return 'border-l-ctp-red';
+		if (daysLeft <= 3) return 'border-l-ctp-yellow';
+		return 'border-l-ctp-surface1';
 	}
 
-	function removeProject(id: string) {
-		if (!draft) return;
-		draft.projects = draft.projects.filter((p) => p.id !== id);
+	function addHomeworkInline() {
+		if (!student) return;
+		const id = crypto.randomUUID();
+		store.update(student.id, {
+			...student,
+			homework: [
+				...student.homework,
+				{ id, title: '', dueDate: today, notes: '', status: 'not_started', addedDate: today }
+			]
+		});
+		inlineHomeworkId = id;
+		inlineHomeworkTitle = '';
+		inlineHomeworkDue = today;
+		inlineHomeworkCourseId = '';
+		inlineHomeworkNotes = '';
+	}
+
+	function startEditHomeworkInline(hw: HomeworkItem) {
+		inlineHomeworkId = hw.id;
+		inlineHomeworkTitle = hw.title;
+		inlineHomeworkDue = hw.dueDate;
+		inlineHomeworkCourseId = hw.courseId ?? '';
+		inlineHomeworkNotes = hw.notes;
+	}
+
+	function saveHomeworkInline() {
+		if (!student || !inlineHomeworkId) return;
+		const id = inlineHomeworkId;
+		store.update(student.id, {
+			...student,
+			homework: student.homework.map((h) =>
+				h.id !== id
+					? h
+					: { ...h, title: inlineHomeworkTitle, dueDate: inlineHomeworkDue, courseId: inlineHomeworkCourseId || undefined, notes: inlineHomeworkNotes }
+			)
+		});
+		inlineHomeworkId = null;
+	}
+
+	function removeHomeworkInline(id: string) {
+		if (!student) return;
+		store.update(student.id, { ...student, homework: student.homework.filter((h) => h.id !== id) });
+		if (inlineHomeworkId === id) inlineHomeworkId = null;
+	}
+
+	function setHomeworkStatus(id: string, status: HomeworkStatus) {
+		if (!student) return;
+		store.update(student.id, {
+			...student,
+			homework: student.homework.map((h) => {
+				if (h.id !== id || h.status === status) return h;
+				return { ...h, status, completedDate: status === 'completed' ? new Date().toISOString() : h.completedDate };
+			})
+		});
+	}
+
+	function copyHomework(hw: HomeworkItem) {
+		if (!student) return;
+		const course = student.courses.find((c) => c.id === hw.courseId);
+		const lines = [
+			hw.title || 'Untitled',
+			course?.name,
+			hw.dueDate ? `Due: ${new Date(hw.dueDate + 'T00:00:00').toLocaleDateString()}` : null,
+			hw.notes || null
+		].filter((l): l is string => !!l);
+		copy(lines.join('\n'), `hw-${hw.id}`);
 	}
 
 	function addProjectInline() {
@@ -627,22 +814,12 @@
 
 	async function copyShareLink() {
 		if (!student) return;
-		const {
-			data: { session }
-		} = await supabase.auth.getSession();
-		if (!session) return;
-		const id = crypto.randomUUID();
-		const { error } = await supabase.from('public_shares').insert({
-			id,
-			user_id: session.user.id,
-			student_id: student.id
-		});
-		if (error) {
+		const url = await getOrCreateShareUrl(student.id);
+		if (!url) {
 			shareError = true;
 			setTimeout(() => (shareError = false), 2500);
 			return;
 		}
-		const url = `${window.location.origin}/share/${id}`;
 		await navigator.clipboard.writeText(url);
 		shareCopied = true;
 		setTimeout(() => (shareCopied = false), 2000);
@@ -681,7 +858,7 @@
 		</div>
 	</div>
 {:else}
-	{@const s = editMode && draft ? draft : student}
+	{@const s = student}
 
 	<div class="min-h-screen bg-ctp-base">
 		<!-- Header -->
@@ -694,75 +871,27 @@
 						<a href="/skills" class="text-sm text-ctp-subtext0 hover:text-ctp-text">Skill Bank</a>
 					</div>
 					<div class="flex gap-2">
-						{#if editMode}
-							<button
-								onclick={() => (showDeleteConfirm = !showDeleteConfirm)}
-								class="rounded px-3 py-1.5 text-sm text-ctp-red transition-colors hover:bg-ctp-red/10"
-							>
-								Delete
-							</button>
-							<button
-								onclick={cancelEdit}
-								class="rounded px-3 py-1.5 text-sm text-ctp-subtext1 transition-colors hover:bg-ctp-surface0"
-							>
-								Cancel
-							</button>
-							<button
-								onclick={saveEdit}
-								class="rounded bg-ctp-blue px-3 py-1.5 text-sm font-medium text-ctp-crust transition-colors hover:opacity-90"
-							>
-								Save
-							</button>
-						{:else}
-							<button
-								onclick={() => store.toggleHiatus(student.id)}
-								class="rounded border px-3 py-1.5 text-sm transition-colors {student.hiatus
-									? 'border-ctp-yellow/40 bg-ctp-yellow/10 text-ctp-yellow hover:bg-ctp-yellow/20'
-									: 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
-							>
-								{student.hiatus ? '▶ Resume Student' : '⏸ Pause Student'}
-							</button>
-							<button
-								onclick={copyShareLink}
-								class="rounded border px-3 py-1.5 text-sm transition-colors {shareCopied ? 'border-ctp-green/40 text-ctp-green' : shareError ? 'border-ctp-red/40 text-ctp-red' : 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
-							>
-								{shareCopied ? '✓ Copied!' : shareError ? 'Failed' : 'Share'}
-							</button>
-							<button
-								onclick={startEdit}
-								class="rounded border border-ctp-surface2 px-3 py-1.5 text-sm text-ctp-subtext1 transition-colors hover:bg-ctp-surface0"
-							>
-								Edit
-							</button>
-						{/if}
+						<button
+							onclick={() => store.toggleHiatus(student.id)}
+							class="rounded border px-3 py-1.5 text-sm transition-colors {student.hiatus
+								? 'border-ctp-yellow/40 bg-ctp-yellow/10 text-ctp-yellow hover:bg-ctp-yellow/20'
+								: 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
+						>
+							{student.hiatus ? '▶ Resume Student' : '⏸ Pause Student'}
+						</button>
+						<button
+							onclick={copyShareLink}
+							class="rounded border px-3 py-1.5 text-sm transition-colors {shareCopied ? 'border-ctp-green/40 text-ctp-green' : shareError ? 'border-ctp-red/40 text-ctp-red' : 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
+						>
+							{shareCopied ? '✓ Copied!' : shareError ? 'Failed' : 'Share'}
+						</button>
 					</div>
 				</div>
 
-				{#if showDeleteConfirm}
-					<div class="mb-3 rounded-lg border border-ctp-red/30 bg-ctp-red/10 px-4 py-3">
-						<p class="mb-2 text-sm font-medium text-ctp-red">
-							Delete {student.name}? This cannot be undone.
-						</p>
-						<div class="flex gap-2">
-							<button
-								onclick={deleteStudent}
-								class="rounded bg-ctp-red px-3 py-1 text-xs font-medium text-ctp-crust hover:opacity-90"
-							>
-								Yes, delete
-							</button>
-							<button
-								onclick={() => (showDeleteConfirm = false)}
-								class="rounded px-3 py-1 text-xs text-ctp-subtext1 hover:bg-ctp-red/10"
-							>
-								Cancel
-							</button>
-						</div>
-					</div>
-				{/if}
-
 				<div class="flex flex-wrap items-baseline gap-3">
-					{#if editMode}
-						<input bind:value={draft!.name} class="{inputClass} text-2xl font-bold" />
+					{#if editingHeader}
+						<input bind:value={headerName} class="{inputClass} text-2xl font-bold" placeholder="Name"
+							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveHeader(); } if (e.key === 'Escape') { e.preventDefault(); editingHeader = false; } }} />
 					{:else}
 						<div class="flex items-center gap-2.5">
 							<span
@@ -770,20 +899,21 @@
 								style="background: {student.color}"
 							></span>
 							<h1 class="text-2xl font-bold text-ctp-text">{student.name}</h1>
+							<button onclick={startEditHeader} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit">✎</button>
 						</div>
 					{/if}
-					<div class="flex flex-wrap gap-2">
-						{#if editMode}
+					<div class="flex flex-wrap items-center gap-2">
+						{#if editingHeader}
 							<input
 								type="number"
-								bind:value={draft!.grade}
+								bind:value={headerGrade}
 								min="1"
 								max="12"
 								class="w-20 rounded px-2 py-0.5 text-sm"
 								placeholder="Grade"
 							/>
 							<input
-								bind:value={draft!.school}
+								bind:value={headerSchool}
 								class="rounded px-2 py-0.5 text-sm"
 								placeholder="School"
 							/>
@@ -791,8 +921,8 @@
 								{#each WEEK_DAYS as day}
 									<button
 										type="button"
-										onclick={() => toggleDay(day)}
-										class="{draft!.days.includes(day)
+										onclick={() => toggleHeaderDay(day)}
+										class="{headerDays.includes(day)
 											? 'bg-ctp-blue text-ctp-crust'
 											: 'bg-ctp-surface1 text-ctp-subtext0 hover:bg-ctp-surface2'} rounded px-1.5 py-0.5 text-xs font-medium transition-colors"
 									>
@@ -800,6 +930,8 @@
 									</button>
 								{/each}
 							</div>
+							<button onclick={saveHeader} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+							<button onclick={() => (editingHeader = false)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
 						{:else}
 							{#if student.grade}
 								<span class="rounded-full bg-ctp-surface1 px-2.5 py-0.5 text-xs font-medium text-ctp-subtext0">
@@ -828,16 +960,20 @@
 		</header>
 
 		<main class="mx-auto max-w-3xl space-y-4 p-6">
-			<!-- School Login -->
+			<!-- Logins -->
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
-				<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">
-					School Login
-				</h2>
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Logins</h2>
+					{#if !editingSchoolLogin}
+						<button onclick={startEditSchoolLogin} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit school login">✎</button>
+					{/if}
+				</div>
+				<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ctp-overlay1">School</p>
 				<div class="space-y-2">
 					<div class="flex items-center gap-3">
 						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">URL</span>
-						{#if editMode}
-							<input bind:value={draft!.schoolUrl} class={inputClass} placeholder="https://..." />
+						{#if editingSchoolLogin}
+							<input bind:value={schoolLoginUrl} class={inputClass} placeholder="https://..." />
 						{:else}
 							<a
 								href={student.schoolUrl}
@@ -861,8 +997,8 @@
 					</div>
 					<div class="flex items-center gap-3">
 						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Username</span>
-						{#if editMode}
-							<input bind:value={draft!.username} class={inputClass} />
+						{#if editingSchoolLogin}
+							<input bind:value={schoolLoginUsername} class={inputClass} />
 						{:else}
 							<span class="flex-1 text-sm text-ctp-text">{student.username || '—'}</span>
 							{#if student.username}
@@ -879,8 +1015,8 @@
 					</div>
 					<div class="flex items-center gap-3">
 						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Password</span>
-						{#if editMode}
-							<input bind:value={draft!.password} class={inputClass} />
+						{#if editingSchoolLogin}
+							<input bind:value={schoolLoginPassword} class={inputClass} />
 						{:else}
 							<span class="flex-1 font-mono text-sm text-ctp-text">
 								{revealed.has('main-pw') ? student.password : '••••••••'}
@@ -903,149 +1039,36 @@
 							{/if}
 						{/if}
 					</div>
-				</div>
-			</section>
-
-			<!-- Contact Info -->
-			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
-				<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">
-					Student Contact
-				</h2>
-				<div class="space-y-2">
-					<div class="flex items-center gap-3">
-						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Phone</span>
-						{#if editMode}
-							<input bind:value={draft!.phone} type="tel" class={inputClass} />
-						{:else}
-							<span class="text-sm text-ctp-text">{s.phone || '—'}</span>
-						{/if}
-					</div>
-					<div class="flex items-center gap-3">
-						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Email</span>
-						{#if editMode}
-							<input bind:value={draft!.email} type="email" class={inputClass} />
-						{:else if s.email}
-							<button
-								onclick={() => copy(s.email, 'student-email')}
-								class="{copied === 'student-email'
-									? 'text-ctp-green'
-									: 'text-ctp-blue hover:text-ctp-lavender'} text-sm transition-colors"
-							>
-								{copied === 'student-email' ? '✓ Copied' : s.email}
-							</button>
-						{:else}
-							<span class="text-sm text-ctp-text">—</span>
-						{/if}
-					</div>
-				</div>
-			</section>
-
-			<!-- Parent/Guardian Contacts -->
-			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
-				<div class="mb-3 flex items-center justify-between">
-					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">
-						Parent / Guardian Contacts
-					</h2>
-					{#if editMode}
-						<button onclick={addContact} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
-							+ Add
-						</button>
+					{#if editingSchoolLogin}
+						<div class="flex gap-2">
+							<button onclick={saveSchoolLogin} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+							<button onclick={() => (editingSchoolLogin = false)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+						</div>
 					{/if}
 				</div>
-				{#if s.contacts.length === 0}
-					<p class="text-sm text-ctp-overlay0">{editMode ? 'No contacts yet.' : '—'}</p>
-				{:else}
-					<div class="space-y-3">
-						{#each s.contacts as contact, i}
-							<div class="rounded-lg border border-ctp-surface1 p-3">
-								{#if editMode}
-									<div class="grid grid-cols-2 gap-2">
-										<input bind:value={draft!.contacts[i].name} class={inputClass} placeholder="Name" />
-										<input
-											bind:value={draft!.contacts[i].relationship}
-											class={inputClass}
-											placeholder="Relationship"
-										/>
-										<input
-											bind:value={draft!.contacts[i].phone}
-											type="tel"
-											class={inputClass}
-											placeholder="Phone"
-										/>
-										<input
-											bind:value={draft!.contacts[i].email}
-											type="email"
-											class={inputClass}
-											placeholder="Email"
-										/>
-									</div>
-									<button onclick={() => removeContact(i)} class="mt-2 text-xs text-ctp-red/70 hover:text-ctp-red">
-										Remove
-									</button>
-								{:else}
-									<p class="font-medium text-ctp-text">
-										{contact.name}
-										{#if contact.relationship}
-											<span class="ml-1 text-xs font-normal text-ctp-overlay0">({contact.relationship})</span>
-										{/if}
-									</p>
-									{#if contact.phone}
-										<p class="text-sm text-ctp-subtext0">{contact.phone}</p>
-									{/if}
-									{#if contact.email}
-										<button
-											onclick={() => copy(contact.email, `c${i}-email`)}
-											class="{copied === `c${i}-email`
-												? 'text-ctp-green'
-												: 'text-ctp-subtext0 hover:text-ctp-blue'} text-sm transition-colors"
-										>
-											{copied === `c${i}-email` ? '✓ Copied' : contact.email}
-										</button>
-									{/if}
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</section>
 
-			<!-- Extra Logins -->
-			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
-				<div class="mb-3 flex items-center justify-between">
-					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Extra Logins</h2>
-					{#if editMode}
-						<button onclick={addExtraLogin} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
-							+ Add
-						</button>
-					{/if}
+				<div class="mt-4 flex items-center justify-between border-t border-ctp-surface1 pt-3">
+					<p class="text-xs font-semibold uppercase tracking-wide text-ctp-overlay1">Extra logins</p>
+					<button onclick={addExtraLoginInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
 				</div>
 				{#if s.extraLogins.length === 0}
-					<p class="text-sm text-ctp-overlay0">{editMode ? 'No extra logins yet.' : '—'}</p>
+					<p class="mt-1 text-sm text-ctp-overlay0">—</p>
 				{:else}
-					<div class="space-y-3">
-						{#each s.extraLogins as login, i}
+					<div class="mt-2 space-y-3">
+						{#each s.extraLogins as login (login.id)}
 							<div class="rounded-lg border border-ctp-surface1 p-3">
-								{#if editMode}
+								{#if inlineLoginId === login.id}
 									<div class="grid grid-cols-2 gap-2">
-										<input bind:value={draft!.extraLogins[i].site} class={inputClass} placeholder="Site name" />
-										<input bind:value={draft!.extraLogins[i].url} class={inputClass} placeholder="URL" />
-										<input
-											bind:value={draft!.extraLogins[i].username}
-											class={inputClass}
-											placeholder="Username"
-										/>
-										<input
-											bind:value={draft!.extraLogins[i].password}
-											class={inputClass}
-											placeholder="Password"
-										/>
+										<input bind:value={inlineLoginSite} class={inputClass} placeholder="Site name" />
+										<input bind:value={inlineLoginUrl} class={inputClass} placeholder="URL" />
+										<input bind:value={inlineLoginUsername} class={inputClass} placeholder="Username" />
+										<input bind:value={inlineLoginPassword} class={inputClass} placeholder="Password" />
 									</div>
-									<button
-										onclick={() => removeExtraLogin(login.id)}
-										class="mt-2 text-xs text-ctp-red/70 hover:text-ctp-red"
-									>
-										Remove
-									</button>
+									<div class="mt-2 flex items-center gap-2">
+										<button onclick={saveExtraLoginInline} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+										<button onclick={() => (inlineLoginId = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+										<button onclick={() => removeExtraLoginInline(login.id)} class="ml-auto text-xs text-ctp-red/60 hover:text-ctp-red transition-colors">Remove</button>
+									</div>
 								{:else}
 									<div class="flex items-center justify-between">
 										<div>
@@ -1059,7 +1082,7 @@
 												>
 											{/if}
 										</div>
-										<div class="flex gap-1.5">
+										<div class="flex items-center gap-1.5">
 											<button
 												onclick={() => copy(login.url, login.id + '-url')}
 												class="{copied === login.id + '-url'
@@ -1084,6 +1107,7 @@
 											>
 												{copied === login.id + '-pw' ? '✓' : '••••'}
 											</button>
+											<button onclick={() => startEditExtraLoginInline(login)} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit">✎</button>
 										</div>
 									</div>
 									<div class="mt-1 text-sm text-ctp-subtext0">
@@ -1111,12 +1135,107 @@
 				{/if}
 			</section>
 
+			<!-- Contacts -->
+			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Contacts</h2>
+					{#if !editingStudentContact}
+						<button onclick={startEditStudentContact} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit student contact">✎</button>
+					{/if}
+				</div>
+				<p class="mb-2 text-xs font-semibold uppercase tracking-wide text-ctp-overlay1">Student</p>
+				<div class="space-y-2">
+					<div class="flex items-center gap-3">
+						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Phone</span>
+						{#if editingStudentContact}
+							<input bind:value={studentPhoneInput} type="tel" class={inputClass} />
+						{:else}
+							<span class="text-sm text-ctp-text">{s.phone || '—'}</span>
+						{/if}
+					</div>
+					<div class="flex items-center gap-3">
+						<span class="w-20 shrink-0 text-xs font-medium text-ctp-overlay1">Email</span>
+						{#if editingStudentContact}
+							<input bind:value={studentEmailInput} type="email" class={inputClass} />
+						{:else if s.email}
+							<button
+								onclick={() => copy(s.email, 'student-email')}
+								class="{copied === 'student-email'
+									? 'text-ctp-green'
+									: 'text-ctp-blue hover:text-ctp-lavender'} text-sm transition-colors"
+							>
+								{copied === 'student-email' ? '✓ Copied' : s.email}
+							</button>
+						{:else}
+							<span class="text-sm text-ctp-text">—</span>
+						{/if}
+					</div>
+					{#if editingStudentContact}
+						<div class="flex gap-2">
+							<button onclick={saveStudentContact} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+							<button onclick={() => (editingStudentContact = false)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+						</div>
+					{/if}
+				</div>
+
+				<div class="mt-4 flex items-center justify-between border-t border-ctp-surface1 pt-3">
+					<p class="text-xs font-semibold uppercase tracking-wide text-ctp-overlay1">Parent / guardian</p>
+					<button onclick={addContactInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
+				</div>
+				{#if s.contacts.length === 0}
+					<p class="mt-1 text-sm text-ctp-overlay0">—</p>
+				{:else}
+					<div class="mt-2 space-y-3">
+						{#each s.contacts as contact, i}
+							<div class="rounded-lg border border-ctp-surface1 p-3">
+								{#if inlineContactId === 'idx-' + i}
+									<div class="grid grid-cols-2 gap-2">
+										<input bind:value={inlineContactName} class={inputClass} placeholder="Name" />
+										<input bind:value={inlineContactRelationship} class={inputClass} placeholder="Relationship" />
+										<input bind:value={inlineContactPhone} type="tel" class={inputClass} placeholder="Phone" />
+										<input bind:value={inlineContactEmail} type="email" class={inputClass} placeholder="Email" />
+									</div>
+									<div class="mt-2 flex items-center gap-2">
+										<button onclick={() => saveContactInline(i)} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+										<button onclick={() => (inlineContactId = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+										<button onclick={() => removeContactInline(i)} class="ml-auto text-xs text-ctp-red/60 hover:text-ctp-red transition-colors">Remove</button>
+									</div>
+								{:else}
+									<div class="flex items-start justify-between gap-2">
+										<p class="font-medium text-ctp-text">
+											{contact.name}
+											{#if contact.relationship}
+												<span class="ml-1 text-xs font-normal text-ctp-overlay0">({contact.relationship})</span>
+											{/if}
+										</p>
+										<button onclick={() => startEditContactInline(i)} class="shrink-0 text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit">✎</button>
+									</div>
+									{#if contact.phone}
+										<p class="text-sm text-ctp-subtext0">{contact.phone}</p>
+									{/if}
+									{#if contact.email}
+										<button
+											onclick={() => copy(contact.email, `c${i}-email`)}
+											class="{copied === `c${i}-email`
+												? 'text-ctp-green'
+												: 'text-ctp-subtext0 hover:text-ctp-blue'} text-sm transition-colors"
+										>
+											{copied === `c${i}-email` ? '✓ Copied' : contact.email}
+										</button>
+									{/if}
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
+
 			<!-- ── Grades ─────────────────────────────────────────────── -->
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Grades</h2>
 					<div class="flex items-center gap-3">
-						{#if !editMode && s.courses.some((c) => c.entries.length > 0)}
+						{#if s.courses.some((c) => c.entries.length > 0)}
 							{#if showResetGradesConfirm}
 								<span class="text-xs text-ctp-overlay0">Clear all grade history?</span>
 								<button onclick={resetGrades} class="text-xs text-ctp-red hover:opacity-80">Yes, reset</button>
@@ -1125,119 +1244,41 @@
 								<button onclick={() => (showResetGradesConfirm = true)} class="text-xs text-ctp-overlay0 hover:text-ctp-red transition-colors">Reset grades</button>
 							{/if}
 						{/if}
-						{#if editMode}
-							<button onclick={addCourse} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
-								+ Add Course
-							</button>
-						{/if}
+						<button onclick={addCourseInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">
+							+ Add Course
+						</button>
 					</div>
 				</div>
 
-				<!-- Chart (view mode only, needs at least one entry) -->
-				{#if !editMode && s.courses.some((c) => c.entries.length > 0)}
+				<!-- Chart (needs at least one entry) -->
+				{#if s.courses.some((c) => c.entries.length > 0)}
 					<div class="mb-5">
 						<GradeChart courses={s.courses} />
 					</div>
 				{/if}
 
 				{#if s.courses.length === 0}
-					<p class="text-sm text-ctp-overlay0">
-						{editMode ? 'No courses yet. Click + Add Course to start.' : 'No courses added yet.'}
-					</p>
+					<p class="text-sm text-ctp-overlay0">No courses added yet.</p>
 				{:else}
 					<div class="space-y-2">
-						{#each s.courses as course, i}
+						{#each s.courses as course (course.id)}
 							<div class="rounded-lg border border-ctp-surface1 p-3">
-								{#if editMode}
-									<!-- Course header row -->
-									<div class="mb-2 flex items-center gap-2">
+								{#if inlineCourseId === course.id}
+									<!-- Inline rename -->
+									<div class="flex items-center gap-2">
 										<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{course.color}"></span>
 										<input
-											bind:value={draft!.courses[i].name}
+											bind:value={inlineCourseName}
 											class="{inputClass} flex-1"
 											placeholder="Course name (e.g. English, Math)"
+											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveCourseInline(); } if (e.key === 'Escape') { e.preventDefault(); inlineCourseId = null; } }}
 										/>
-										<button
-											onclick={() => removeCourse(course.id)}
-											class="shrink-0 text-xs text-ctp-red/70 hover:text-ctp-red"
-										>
-											Remove
-										</button>
+										<button onclick={saveCourseInline} class="shrink-0 rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+										<button onclick={() => (inlineCourseId = null)} class="shrink-0 text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+										<button onclick={() => removeCourse(course.id)} class="shrink-0 text-xs text-ctp-red/70 hover:text-ctp-red">Remove</button>
 									</div>
-									<!-- Entry list -->
-									{#if draft!.courses[i].entries.length > 0}
-										<div class="mb-2 space-y-0.5 pl-4">
-											{#each draft!.courses[i].entries as entry, j}
-												<div class="flex items-center gap-2 text-xs text-ctp-subtext0">
-													<span
-														>{new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
-															month: 'short',
-															day: 'numeric',
-															year: 'numeric'
-														})}</span
-													>
-													<span class="font-medium text-ctp-text">{entry.grade}%</span>
-													<button
-														onclick={() => removeGradeEntry(course.id, j)}
-														class="text-ctp-red/40 hover:text-ctp-red"
-													>
-														✕
-													</button>
-												</div>
-											{/each}
-										</div>
-									{/if}
-									<!-- Add entry form -->
-									{#if editEntryOpen === course.id}
-										<div class="flex flex-wrap items-center gap-2 rounded bg-ctp-surface1 px-3 py-2 pl-4">
-											<input
-												type="date"
-												bind:value={editEntryDate}
-												class={miniInputClass}
-												onkeydown={(e) => {
-													if (e.key === 'Enter') { e.preventDefault(); submitEditEntry(); }
-													if (e.key === 'Escape') { e.preventDefault(); editEntryOpen = null; }
-												}}
-											/>
-											<div class="flex items-center gap-1">
-												<input
-													type="number"
-													bind:value={editEntryGrade}
-													min="0"
-													max="100"
-													step="1"
-													class="{miniInputClass} w-16 text-right"
-													use:autoselect
-													onkeydown={(e) => {
-														if (e.key === 'Enter') { e.preventDefault(); submitEditEntry(); }
-														if (e.key === 'Escape') { e.preventDefault(); editEntryOpen = null; }
-													}}
-												/>
-												<span class="text-xs text-ctp-overlay0">%</span>
-											</div>
-											<button
-												onclick={submitEditEntry}
-												class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90"
-											>
-												Add
-											</button>
-											<button
-												onclick={() => (editEntryOpen = null)}
-												class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0"
-											>
-												Cancel
-											</button>
-										</div>
-									{:else}
-										<button
-											onclick={() => openEditEntry(course.id)}
-											class="pl-4 text-xs text-ctp-blue hover:text-ctp-lavender"
-										>
-											+ Add entry
-										</button>
-									{/if}
 								{:else}
-									<!-- View mode course row -->
+									<!-- Course row -->
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-2">
 											<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{course.color}"></span>
@@ -1253,6 +1294,7 @@
 											{:else}
 												<span class="text-xs text-ctp-surface2">no entries</span>
 											{/if}
+											<button onclick={() => startEditCourseInline(course)} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Rename / remove">✎</button>
 										</div>
 										{#if activeCourseLog !== course.id}
 											<button
@@ -1315,6 +1357,35 @@
 											</button>
 										</div>
 									{/if}
+									<!-- Entry history -->
+									{#if course.entries.length > 0}
+										<button onclick={() => toggleCourseHistory(course.id)} class="mt-2 text-xs text-ctp-overlay0 hover:text-ctp-subtext0 transition-colors">
+											{expandedCourseHistory.has(course.id) ? '▾' : '▸'} History ({course.entries.length})
+										</button>
+										{#if expandedCourseHistory.has(course.id)}
+											<div class="mt-1 space-y-0.5">
+												{#each [...course.entries].reverse() as entry, ri}
+													{@const j = course.entries.length - 1 - ri}
+													<div class="flex items-center gap-2 text-xs text-ctp-subtext0">
+														<span
+															>{new Date(entry.date + 'T00:00:00').toLocaleDateString('en-US', {
+																month: 'short',
+																day: 'numeric',
+																year: 'numeric'
+															})}</span
+														>
+														<span class="font-medium text-ctp-text">{entry.grade}%</span>
+														<button
+															onclick={() => removeGradeEntry(course.id, j)}
+															class="text-ctp-red/40 hover:text-ctp-red"
+														>
+															✕
+														</button>
+													</div>
+												{/each}
+											</div>
+										{/if}
+									{/if}
 								{/if}
 							</div>
 						{/each}
@@ -1326,36 +1397,15 @@
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-3 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Big Projects</h2>
-					{#if editMode}
-						<button onclick={addProject} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
-					{:else}
-						<button onclick={addProjectInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
-					{/if}
+					<button onclick={addProjectInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
 				</div>
 				{#if s.projects.length === 0}
 					<p class="text-sm text-ctp-overlay0">No projects yet.</p>
 				{:else}
 					<div class="space-y-4">
-						{#each s.projects as project, i}
+						{#each s.projects as project (project.id)}
 							<div>
-								{#if editMode}
-									<div class="grid grid-cols-2 gap-2">
-										<input
-											bind:value={draft!.projects[i].title}
-											class="{inputClass} col-span-2"
-											placeholder="Project title"
-										/>
-										<div>
-											<label for={'proj-start-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">Start</label>
-											<input id={'proj-start-' + project.id} type="date" bind:value={draft!.projects[i].startDate} class={inputClass} />
-										</div>
-										<div>
-											<label for={'proj-due-' + project.id} class="mb-1 block text-xs text-ctp-overlay0">Due</label>
-											<input id={'proj-due-' + project.id} type="date" bind:value={draft!.projects[i].dueDate} class={inputClass} />
-										</div>
-									</div>
-									<button onclick={() => removeProject(project.id)} class="mt-2 text-xs text-ctp-red/70 hover:text-ctp-red">Remove</button>
-								{:else if inlineProjectId === project.id}
+								{#if inlineProjectId === project.id}
 									<div class="space-y-2">
 										<input bind:value={inlineProjectTitle} class="{inputClass} w-full" placeholder="Project title"
 											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveProjectInline(); } if (e.key === 'Escape') { e.preventDefault(); inlineProjectId = null; } }} />
@@ -1402,12 +1452,100 @@
 				{/if}
 			</section>
 
+			<!-- Homework -->
+			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Homework</h2>
+					<button onclick={addHomeworkInline} class="text-xs font-medium text-ctp-blue hover:text-ctp-lavender">+ Add</button>
+				</div>
+				{#if s.homework.length === 0}
+					<p class="text-sm text-ctp-overlay0">No homework yet.</p>
+				{:else}
+					<div class="space-y-3">
+						{#each s.homework as hw (hw.id)}
+							{@const overdue = hw.status !== 'completed' && !!hw.dueDate && hw.dueDate < today}
+							<div class="rounded-lg border border-ctp-surface1 border-l-4 {homeworkUrgencyBorder(hw)} p-3 {overdue ? 'bg-ctp-red/5' : ''}">
+								{#if inlineHomeworkId === hw.id}
+									<div class="space-y-2">
+										<input
+											bind:value={inlineHomeworkTitle}
+											class={inputClass}
+											placeholder="Assignment title"
+											onkeydown={(e) => {
+												if (e.key === 'Escape') {
+													e.preventDefault();
+													inlineHomeworkId = null;
+												}
+											}}
+										/>
+										<div class="grid grid-cols-2 gap-2">
+											<div>
+												<label for="inline-hw-due" class="mb-1 block text-xs text-ctp-overlay0">Due</label>
+												<input id="inline-hw-due" type="date" bind:value={inlineHomeworkDue} class={inputClass} />
+											</div>
+											<div>
+												<label for="inline-hw-course" class="mb-1 block text-xs text-ctp-overlay0">Course</label>
+												<select id="inline-hw-course" bind:value={inlineHomeworkCourseId} class={inputClass}>
+													<option value="">—</option>
+													{#each student.courses as c}
+														<option value={c.id}>{c.name}</option>
+													{/each}
+												</select>
+											</div>
+										</div>
+										<textarea bind:value={inlineHomeworkNotes} class="{inputClass} min-h-16" placeholder="Instructions / notes"></textarea>
+										<div class="flex items-center gap-2">
+											<button onclick={saveHomeworkInline} class="rounded bg-ctp-blue px-2.5 py-1 text-xs font-medium text-ctp-crust hover:opacity-90">Save</button>
+											<button onclick={() => (inlineHomeworkId = null)} class="text-xs text-ctp-overlay0 hover:text-ctp-subtext0">Cancel</button>
+											<button onclick={() => removeHomeworkInline(hw.id)} class="ml-auto text-xs text-ctp-red/60 hover:text-ctp-red transition-colors">Remove</button>
+										</div>
+									</div>
+								{:else}
+									{@const course = student.courses.find((c) => c.id === hw.courseId)}
+									<div class="mb-1.5 flex items-start justify-between gap-2">
+										<div class="flex items-center gap-2">
+											{#if course}<span class="h-2 w-2 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
+											<p class="font-medium text-ctp-text">{hw.title || 'Untitled'}</p>
+										</div>
+										<div class="flex shrink-0 items-center gap-2">
+											<button
+												onclick={() => copyHomework(hw)}
+												class="text-xs transition-colors {copied === `hw-${hw.id}` ? 'text-ctp-green' : 'text-ctp-overlay0/60 hover:text-ctp-subtext0'}"
+											>
+												{copied === `hw-${hw.id}` ? '✓' : 'Copy'}
+											</button>
+											<button onclick={() => startEditHomeworkInline(hw)} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors">✎</button>
+										</div>
+									</div>
+									{#if hw.dueDate}
+										<p class="mb-2 text-xs {overdue ? 'font-medium text-ctp-red' : 'text-ctp-overlay0'}">
+											Due {new Date(hw.dueDate + 'T00:00:00').toLocaleDateString()}{overdue ? ' — overdue' : ''}
+										</p>
+									{/if}
+									{#if hw.notes}
+										<p class="mb-2 whitespace-pre-wrap text-sm text-ctp-subtext1">{hw.notes}</p>
+									{/if}
+									<div class="flex gap-1.5">
+										{#each HOMEWORK_STATUS_ORDER as st (st)}
+											<button
+												onclick={() => setHomeworkStatus(hw.id, st)}
+												class="{hw.status === st ? HOMEWORK_STATUS_ACTIVE[st] : 'bg-ctp-surface1 text-ctp-overlay0 hover:bg-ctp-surface2'} rounded px-2.5 py-1 text-xs transition-colors"
+											>{HOMEWORK_STATUS_LABEL[st]}</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</section>
+
 			<!-- Skills -->
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Skills</h2>
 					<div class="flex items-center gap-3">
-					{#if !editMode && store.skillBank.length > 0}
+					{#if store.skillBank.length > 0}
 						<div class="relative">
 							{#if showAssignSkill}
 								<div class="absolute right-0 top-6 z-10 flex w-80 flex-col rounded-lg border border-ctp-surface1 bg-ctp-mantle shadow-lg" style="max-height: 26rem">
@@ -1479,14 +1617,12 @@
 							<div>
 								<div class="mb-2 flex items-center justify-between">
 									<p class="text-xs font-semibold uppercase tracking-wide text-ctp-overlay0">{cat}</p>
-									{#if !editMode}
-										<button
-											onclick={() => copySkillsForAI(cat)}
-											class="text-xs font-medium transition-colors {copied === `ai-skills-${cat}` ? 'text-ctp-green' : 'text-ctp-overlay0 hover:text-ctp-subtext0'}"
-										>
-											{copied === `ai-skills-${cat}` ? '✓ Copied' : 'Copy for AI'}
-										</button>
-									{/if}
+									<button
+										onclick={() => copySkillsForAI(cat)}
+										class="text-xs font-medium transition-colors {copied === `ai-skills-${cat}` ? 'text-ctp-green' : 'text-ctp-overlay0 hover:text-ctp-subtext0'}"
+									>
+										{copied === `ai-skills-${cat}` ? '✓ Copied' : 'Copy for AI'}
+									</button>
 								</div>
 								<div class="space-y-2">
 									{#each s.skills.filter((sk) => store.skillBank.find((b) => b.id === sk.skillId)?.category === cat) as sk}
@@ -1732,18 +1868,11 @@
 			<section class="rounded-xl bg-ctp-surface0 p-5 shadow-sm">
 				<div class="mb-3 flex items-center justify-between">
 					<h2 class="text-sm font-semibold uppercase tracking-wide text-ctp-overlay0">Notes</h2>
-					{#if !editMode && !editingNotes}
+					{#if !editingNotes}
 						<button onclick={startEditNotes} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors">✎</button>
 					{/if}
 				</div>
-				{#if editMode}
-					<textarea
-						bind:value={draft!.notes}
-						rows="4"
-						class="w-full rounded px-3 py-2 text-sm"
-						placeholder="Any additional notes..."
-					></textarea>
-				{:else if editingNotes}
+				{#if editingNotes}
 					<textarea
 						bind:value={notesInput}
 						rows="4"
@@ -1756,6 +1885,39 @@
 					</div>
 				{:else}
 					<p class="whitespace-pre-wrap text-sm text-ctp-text">{s.notes || '—'}</p>
+				{/if}
+			</section>
+
+			<!-- Danger Zone -->
+			<section class="rounded-xl border border-ctp-red/20 bg-ctp-surface0 p-5 shadow-sm">
+				<h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ctp-red/70">Danger Zone</h2>
+				{#if showDeleteConfirm}
+					<div class="rounded-lg border border-ctp-red/30 bg-ctp-red/10 px-4 py-3">
+						<p class="mb-2 text-sm font-medium text-ctp-red">
+							Delete {student.name}? This cannot be undone.
+						</p>
+						<div class="flex gap-2">
+							<button
+								onclick={deleteStudent}
+								class="rounded bg-ctp-red px-3 py-1 text-xs font-medium text-ctp-crust hover:opacity-90"
+							>
+								Yes, delete
+							</button>
+							<button
+								onclick={() => (showDeleteConfirm = false)}
+								class="rounded px-3 py-1 text-xs text-ctp-subtext1 hover:bg-ctp-red/10"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				{:else}
+					<button
+						onclick={() => (showDeleteConfirm = true)}
+						class="rounded border border-ctp-red/40 px-3 py-1.5 text-sm text-ctp-red transition-colors hover:bg-ctp-red/10"
+					>
+						Delete student
+					</button>
 				{/if}
 			</section>
 		</main>

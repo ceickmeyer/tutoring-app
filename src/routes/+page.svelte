@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { store, uniqueSlug } from '$lib/store.svelte';
 	import { supabase } from '$lib/supabase';
+	import { getOrCreateShareUrl } from '$lib/share';
 	import { STUDENT_COLORS } from '$lib/types';
 	import type { Day } from '$lib/types';
 
@@ -149,6 +150,19 @@
 		toastTimer = setTimeout(() => (toast = null), 1500);
 	}
 
+	async function shareStudent(studentId: string, name: string) {
+		const url = await getOrCreateShareUrl(studentId);
+		clearTimeout(toastTimer);
+		if (!url) {
+			toast = "Couldn't create share link";
+			toastTimer = setTimeout(() => (toast = null), 2500);
+			return;
+		}
+		await navigator.clipboard.writeText(url);
+		toast = name + ' share link';
+		toastTimer = setTimeout(() => (toast = null), 1500);
+	}
+
 	function toggleNewDay(day: Day) {
 		newDays = newDays.includes(day) ? newDays.filter((d) => d !== day) : [...newDays, day];
 	}
@@ -172,6 +186,7 @@
 			extraLogins: [],
 			courses: [],
 			skills: [],
+			homework: [],
 			hiatus: false,
 			color: STUDENT_COLORS[store.list.length % STUDENT_COLORS.length]
 		});
@@ -215,6 +230,7 @@
 				extraLogins: [],
 				courses: [],
 				skills: [],
+				homework: [],
 				hiatus: false,
 				color: STUDENT_COLORS[store.list.length % STUDENT_COLORS.length]
 			});
@@ -377,6 +393,12 @@
 												d="M17,9V7A5,5,0,0,0,7,7V9a3,3,0,0,0-3,3v7a3,3,0,0,0,3,3H17a3,3,0,0,0,3-3V12A3,3,0,0,0,17,9ZM9,7a3,3,0,0,1,6,0V9H9Zm9,12a1,1,0,0,1-1,1H7a1,1,0,0,1-1-1V12a1,1,0,0,1,1-1H17a1,1,0,0,1,1,1Z"
 											/>
 										</svg>
+									</button>
+									<button
+										onclick={() => shareStudent(student.id, student.name)}
+										class="rounded bg-ctp-surface1 px-2 py-1 text-xs font-medium text-ctp-subtext1 transition-colors hover:bg-ctp-surface2"
+									>
+										Share
 									</button>
 								</div>
 							</td>

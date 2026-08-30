@@ -4,7 +4,8 @@
 	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
 	import { supabase } from '$lib/supabase';
 	import { computeSkillStatus, SKILL_STATUS_LABEL, type SkillStatusKind } from '$lib/skillStatus';
-	import type { SkillStatus } from '$lib/types';
+	import { HOMEWORK_STATUS_LABEL, HOMEWORK_STATUS_ORDER } from '$lib/homeworkStatus';
+	import type { HomeworkStatus, SkillStatus } from '$lib/types';
 	import type { ShareData } from './+page';
 
 	let { data } = $props();
@@ -29,6 +30,12 @@
 	};
 
 	const STATUS_OPTIONS: SkillStatus[] = ['not_started', 'working', 'mastered'];
+
+	const HOMEWORK_STATUS_SYMBOL: Record<HomeworkStatus, string> = {
+		completed: '✓',
+		working: '◐',
+		not_started: '○'
+	};
 
 	// ── Family-editable status ──────────────────────────────────────
 	let openSkillId = $state<string | null>(null);
@@ -85,6 +92,46 @@
 			.filter((x) => x.def?.category === cat);
 	}
 
+	// ── Family-editable homework status ─────────────────────────────
+	let openHomeworkId = $state<string | null>(null);
+	let savingHomeworkChange = $state<{ id: string; status: HomeworkStatus } | null>(null);
+	let saveHomeworkError = $state<string | null>(null);
+
+	function startEditHomeworkStatus(id: string) {
+		openHomeworkId = id;
+		saveHomeworkError = null;
+	}
+
+	function cancelEditHomeworkStatus() {
+		openHomeworkId = null;
+		saveHomeworkError = null;
+	}
+
+	async function pickHomeworkStatus(id: string, status: HomeworkStatus) {
+		if (!s) return;
+		savingHomeworkChange = { id, status };
+		saveHomeworkError = null;
+		const { error } = await supabase.rpc('update_shared_homework_status', {
+			p_share_id: data.shareId,
+			p_homework_id: id,
+			p_new_status: status
+		});
+		savingHomeworkChange = null;
+		if (error) {
+			saveHomeworkError = "Couldn't save that — please try again.";
+			return;
+		}
+		s = {
+			...s,
+			homework: (s.homework ?? []).map((hw) => (hw.id === id ? { ...hw, status } : hw))
+		};
+		openHomeworkId = null;
+	}
+
+	function isHomeworkOverdue(hw: { status: HomeworkStatus; dueDate: string }): boolean {
+		return hw.status !== 'completed' && !!hw.dueDate && hw.dueDate < new Date().toISOString().slice(0, 10);
+	}
+
 	function getProgress(project: { startDate: string; dueDate: string }) {
 		if (!project.startDate || !project.dueDate) return { pct: 0, daysLeft: null, overdue: false };
 		const now = Date.now();
@@ -133,6 +180,103 @@
 					<section>
 						<h2 class="report-heading">Grades</h2>
 						<GradeChart courses={activeCourses} light />
+					</section>
+				{/if}
+
+				{#if s.projects.length > 0}
+					<section>
+						<h2 class="report-heading">Big Projects</h2>
+						<div class="report-card space-y-5">
+							{#each s.projects as project}
+								{@const prog = getProgress(project)}
+								<div>
+									<p class="mb-1.5 font-semibold" style="color: var(--rc-heading)">{project.title || 'Untitled'}</p>
+									<div class="mb-1.5 h-2.5 w-full overflow-hidden rounded-full" style="background: var(--rc-track)">
+										<div
+											class="h-2.5 rounded-full transition-all"
+											style="width: {prog.pct}%; background: {barColor(prog.daysLeft, prog.overdue)}"
+										></div>
+									</div>
+									<div class="flex justify-between text-xs" style="color: var(--rc-muted)">
+										<span>
+											{project.startDate
+												? new Date(project.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+												: '—'}
+										</span>
+										<span>
+											{#if prog.overdue}
+												<span class="font-semibold" style="color: var(--rc-red-text)">Overdue</span>
+											{:else if prog.daysLeft !== null}
+												{prog.daysLeft} day{prog.daysLeft !== 1 ? 's' : ''} left
+											{/if}
+										</span>
+										<span>
+											{project.dueDate
+												? new Date(project.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+												: '—'}
+										</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
+				{#if (s.homework ?? []).length > 0}
+					<section>
+						<h2 class="report-heading">Homework</h2>
+						<div class="space-y-3">
+							{#each s.homework ?? [] as hw (hw.id)}
+								{@const course = s.courses.find((c) => c.id === hw.courseId)}
+								{@const overdue = isHomeworkOverdue(hw)}
+								<div class="report-card status-{hw.status === 'completed' ? 'mastered' : hw.status}">
+									<div class="flex items-start justify-between gap-3">
+										<div class="flex items-center gap-2">
+											{#if course}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
+											<span class="text-base font-semibold" style="color: var(--rc-heading)">{hw.title || 'Untitled'}</span>
+										</div>
+										<button
+											class="status-pill status-pill-button status-{hw.status === 'completed' ? 'mastered' : hw.status}"
+											onclick={() => startEditHomeworkStatus(hw.id)}
+											disabled={openHomeworkId === hw.id}
+										>
+											<span aria-hidden="true">{HOMEWORK_STATUS_SYMBOL[hw.status]}</span>
+											{HOMEWORK_STATUS_LABEL[hw.status]}
+										</button>
+									</div>
+
+									{#if hw.dueDate}
+										<p class="mt-1 text-xs" style="color: {overdue ? 'var(--rc-red-text)' : 'var(--rc-muted)'}; font-weight: {overdue ? 600 : 400}">
+											Due {new Date(hw.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{overdue ? ' — overdue' : ''}
+										</p>
+									{/if}
+
+									{#if openHomeworkId === hw.id}
+										<div class="status-editor">
+											<p class="status-editor-text">Update status:</p>
+											{#if saveHomeworkError}<p class="status-editor-error">{saveHomeworkError}</p>{/if}
+											<div class="status-editor-actions">
+												{#each HOMEWORK_STATUS_ORDER as opt (opt)}
+													<button
+														class="status-option status-{opt === 'completed' ? 'mastered' : opt}"
+														onclick={() => pickHomeworkStatus(hw.id, opt)}
+														disabled={savingHomeworkChange?.id === hw.id}
+													>
+														<span aria-hidden="true">{HOMEWORK_STATUS_SYMBOL[opt]}</span>
+														{savingHomeworkChange?.id === hw.id && savingHomeworkChange.status === opt ? 'Saving…' : HOMEWORK_STATUS_LABEL[opt]}
+													</button>
+												{/each}
+												<button class="status-btn-text" onclick={cancelEditHomeworkStatus} disabled={savingHomeworkChange?.id === hw.id}>Cancel</button>
+											</div>
+										</div>
+									{/if}
+
+									{#if hw.notes}
+										<p class="mt-2.5 whitespace-pre-wrap text-sm leading-relaxed" style="color: var(--rc-text)">{hw.notes}</p>
+									{/if}
+								</div>
+							{/each}
+						</div>
 					</section>
 				{/if}
 
@@ -222,45 +366,6 @@
 												</div>
 											{/if}
 										{/each}
-									</div>
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				{#if s.projects.length > 0}
-					<section>
-						<h2 class="report-heading">Big Projects</h2>
-						<div class="report-card space-y-5">
-							{#each s.projects as project}
-								{@const prog = getProgress(project)}
-								<div>
-									<p class="mb-1.5 font-semibold" style="color: var(--rc-heading)">{project.title || 'Untitled'}</p>
-									<div class="mb-1.5 h-2.5 w-full overflow-hidden rounded-full" style="background: var(--rc-track)">
-										<div
-											class="h-2.5 rounded-full transition-all"
-											style="width: {prog.pct}%; background: {barColor(prog.daysLeft, prog.overdue)}"
-										></div>
-									</div>
-									<div class="flex justify-between text-xs" style="color: var(--rc-muted)">
-										<span>
-											{project.startDate
-												? new Date(project.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-												: '—'}
-										</span>
-										<span>
-											{#if prog.overdue}
-												<span class="font-semibold" style="color: var(--rc-red-text)">Overdue</span>
-											{:else if prog.daysLeft !== null}
-												{prog.daysLeft} day{prog.daysLeft !== 1 ? 's' : ''} left
-											{/if}
-										</span>
-										<span>
-											{project.dueDate
-												? new Date(project.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-												: '—'}
-										</span>
 									</div>
 								</div>
 							{/each}

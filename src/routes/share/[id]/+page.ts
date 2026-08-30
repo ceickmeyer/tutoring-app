@@ -1,6 +1,6 @@
 import type { PageLoad } from './$types';
 import { supabase } from '$lib/supabase';
-import type { Course, BigProject, SkillBankItem, StudentSkill } from '$lib/types';
+import type { Course, BigProject, HomeworkItem, SkillBankItem, StudentSkill } from '$lib/types';
 
 export interface ShareData {
 	name: string;
@@ -9,6 +9,7 @@ export interface ShareData {
 	projects: BigProject[];
 	skills?: StudentSkill[];
 	skillDefs?: SkillBankItem[];
+	homework?: HomeworkItem[];
 }
 
 export const load: PageLoad = async ({ params }) => {

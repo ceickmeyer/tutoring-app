@@ -72,6 +72,19 @@ export const COURSE_COLORS = [
 	'#b7bdf8'  // lavender
 ];
 
+export type HomeworkStatus = 'not_started' | 'working' | 'completed';
+
+export interface HomeworkItem {
+	id: string;
+	title: string;
+	dueDate: string; // YYYY-MM-DD
+	courseId?: string; // links to a Course, for color/subject grouping
+	notes: string; // instructions, e.g. "pg 42 #1-20"
+	status: HomeworkStatus;
+	addedDate: string; // YYYY-MM-DD, set on creation
+	completedDate?: string; // ISO datetime, set when status becomes 'completed'
+}
+
 export type SkillType = 'status' | 'scored' | 'multi';
 export type SkillStatus = 'not_started' | 'working' | 'mastered';
 
@@ -126,6 +139,7 @@ export interface Student {
 	extraLogins: ExtraLogin[];
 	courses: Course[];
 	skills: StudentSkill[];
+	homework: HomeworkItem[];
 	hiatus: boolean;
 	color: string;
 }
