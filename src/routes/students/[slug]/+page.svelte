@@ -1503,9 +1503,12 @@
 								{:else}
 									{@const course = student.courses.find((c) => c.id === hw.courseId)}
 									<div class="mb-1.5 flex items-start justify-between gap-2">
-										<div class="flex items-center gap-2">
-											{#if course}<span class="h-2 w-2 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
-											<p class="font-medium text-ctp-text">{hw.title || 'Untitled'}</p>
+										<div>
+											<div class="flex items-center gap-2">
+												{#if course}<span class="h-2 w-2 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
+												<p class="font-medium text-ctp-text">{hw.title || 'Untitled'}</p>
+											</div>
+											{#if course}<p class="text-xs text-ctp-overlay0">{course.name}</p>{/if}
 										</div>
 										<div class="flex shrink-0 items-center gap-2">
 											<button

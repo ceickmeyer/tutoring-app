@@ -231,9 +231,12 @@
 								{@const overdue = isHomeworkOverdue(hw)}
 								<div class="report-card status-{hw.status === 'completed' ? 'mastered' : hw.status}">
 									<div class="flex items-start justify-between gap-3">
-										<div class="flex items-center gap-2">
-											{#if course}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
-											<span class="text-base font-semibold" style="color: var(--rc-heading)">{hw.title || 'Untitled'}</span>
+										<div>
+											<div class="flex items-center gap-2">
+												{#if course}<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{course.color}"></span>{/if}
+												<span class="text-base font-semibold" style="color: var(--rc-heading)">{hw.title || 'Untitled'}</span>
+											</div>
+											{#if course}<p class="text-xs" style="color: var(--rc-muted)">{course.name}</p>{/if}
 										</div>
 										<button
 											class="status-pill status-pill-button status-{hw.status === 'completed' ? 'mastered' : hw.status}"
