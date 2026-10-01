@@ -3,6 +3,8 @@
 	import GradeChart from '$lib/GradeChart.svelte';
 	import SkillMultiChart from '$lib/SkillMultiChart.svelte';
 	import SkillSparkline from '$lib/SkillSparkline.svelte';
+	import LockIcon from '$lib/LockIcon.svelte';
+	import ShareIcon from '$lib/ShareIcon.svelte';
 	import { getOrCreateShareUrl } from '$lib/share';
 	import { store } from '$lib/store.svelte';
 	import { COURSE_COLORS } from '$lib/types';
@@ -881,9 +883,16 @@
 						</button>
 						<button
 							onclick={copyShareLink}
-							class="rounded border px-3 py-1.5 text-sm transition-colors {shareCopied ? 'border-ctp-green/40 text-ctp-green' : shareError ? 'border-ctp-red/40 text-ctp-red' : 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
+							class="flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm transition-colors {shareCopied ? 'border-ctp-green/40 text-ctp-green' : shareError ? 'border-ctp-red/40 text-ctp-red' : 'border-ctp-surface2 text-ctp-subtext1 hover:bg-ctp-surface0'}"
 						>
-							{shareCopied ? '✓ Copied!' : shareError ? 'Failed' : 'Share'}
+							{#if shareCopied}
+								✓ Copied!
+							{:else if shareError}
+								Failed
+							{:else}
+								<ShareIcon class="h-4 w-4" />
+								Share
+							{/if}
 						</button>
 					</div>
 				</div>
@@ -1018,8 +1027,12 @@
 						{#if editingSchoolLogin}
 							<input bind:value={schoolLoginPassword} class={inputClass} />
 						{:else}
-							<span class="flex-1 font-mono text-sm text-ctp-text">
-								{revealed.has('main-pw') ? student.password : '••••••••'}
+							<span class="flex flex-1 items-center font-mono text-sm text-ctp-text">
+								{#if revealed.has('main-pw')}
+									{student.password}
+								{:else if student.password}
+									<LockIcon class="h-3.5 w-3.5 text-ctp-overlay0" />
+								{/if}
 							</span>
 							{#if student.password}
 								<button
@@ -1103,21 +1116,29 @@
 												onclick={() => copy(login.password, login.id + '-pw')}
 												class="{copied === login.id + '-pw'
 													? 'bg-ctp-green/20 text-ctp-green'
-													: 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} rounded px-2 py-1 font-mono text-xs font-medium transition-colors"
+													: 'bg-ctp-surface1 text-ctp-subtext1 hover:bg-ctp-surface2'} flex items-center rounded px-2 py-1 transition-colors"
+												aria-label="Copy password"
 											>
-												{copied === login.id + '-pw' ? '✓' : '••••'}
+												{#if copied === login.id + '-pw'}
+													✓
+												{:else}
+													<LockIcon />
+												{/if}
 											</button>
 											<button onclick={() => startEditExtraLoginInline(login)} class="text-xs text-ctp-overlay0/60 hover:text-ctp-subtext0 transition-colors" title="Edit">✎</button>
 										</div>
 									</div>
-									<div class="mt-1 text-sm text-ctp-subtext0">
-										{login.username || '—'} ·
-										<span class="font-mono">
-											{revealed.has(login.id)
-												? login.password
-												: login.password
-													? '••••••••'
-													: '—'}
+									<div class="mt-1 flex items-center gap-1 text-sm text-ctp-subtext0">
+										<span>{login.username || '—'}</span>
+										<span>·</span>
+										<span class="inline-flex items-center font-mono">
+											{#if revealed.has(login.id)}
+												{login.password || '—'}
+											{:else if login.password}
+												<LockIcon class="h-3 w-3" />
+											{:else}
+												—
+											{/if}
 										</span>
 										{#if login.password}
 											<button
