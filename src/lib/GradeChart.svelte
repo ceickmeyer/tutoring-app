@@ -18,12 +18,49 @@
 		MT = 14,
 		MB = 30;
 	const LABEL_GAP = 12;
-	const LABEL_W = 180;
 	const LABEL_H = 24;
 	const LABEL_PAD = 4;
-	const CW = W - ML - MR - LABEL_GAP - LABEL_W; // 580
+	const LABEL_MIN_W = 180;
+	const LABEL_MAX_W = 320;
+	const LABEL_TEXT_PAD_ICON = 19; // left offset when a trend icon is shown
+	const LABEL_TEXT_PAD_PLAIN = 6; // left offset with no icon
+	const LABEL_TEXT_PAD_RIGHT = 10;
 	const CH = H - MT - MB; // 256
-	const LABEL_X = ML + CW + LABEL_GAP; // 632
+
+	// Rough average glyph width for the default sans-serif font at 12px —
+	// just enough to size the label box, not pixel-accurate.
+	function estimateTextWidth(text: string): number {
+		return text.length * 6.8;
+	}
+
+	// Widen the label column to fit the longest "name – grade%" so long
+	// course names don't get clipped by the chart's overflow-hidden wrapper.
+	const LABEL_W = $derived.by(() => {
+		const active = courses.filter((c) => c.entries.length > 0);
+		if (!active.length) return LABEL_MIN_W;
+		const widths = active.map((c) => {
+			const lastGrade = c.entries[c.entries.length - 1].grade;
+			const text = `${c.name} – ${lastGrade}%`;
+			return estimateTextWidth(text) + LABEL_TEXT_PAD_ICON + LABEL_TEXT_PAD_RIGHT;
+		});
+		return Math.min(LABEL_MAX_W, Math.max(LABEL_MIN_W, Math.ceil(Math.max(...widths))));
+	});
+	const CW = $derived(W - ML - MR - LABEL_GAP - LABEL_W);
+	const LABEL_X = $derived(ML + CW + LABEL_GAP);
+
+	// Truncates the course name (not the grade) with an ellipsis for the
+	// rare name that's still too long even at LABEL_MAX_W.
+	function fitLabelText(name: string, grade: number, hasIcon: boolean): string {
+		const pad = (hasIcon ? LABEL_TEXT_PAD_ICON : LABEL_TEXT_PAD_PLAIN) + LABEL_TEXT_PAD_RIGHT;
+		const maxTextWidth = LABEL_W - pad;
+		const full = `${name} – ${grade}%`;
+		if (estimateTextWidth(full) <= maxTextWidth) return full;
+		let truncated = name;
+		while (truncated.length > 0 && estimateTextWidth(`${truncated}… – ${grade}%`) > maxTextWidth) {
+			truncated = truncated.slice(0, -1);
+		}
+		return `${truncated}… – ${grade}%`;
+	}
 
 	// Collect every timestamp across all courses
 	const allTimes = $derived(
@@ -272,11 +309,11 @@
 							{/if}
 						</g>
 						<text x={LABEL_X + 19} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.textColor}
-							>{lbl.name} – {lbl.grade}%</text
+							>{fitLabelText(lbl.name, lbl.grade, true)}</text
 						>
 					{:else}
 						<text x={LABEL_X + 6} y={lbl.y + LABEL_H - 7} font-size="12" font-weight="500" fill={lbl.textColor}
-							>{lbl.name} – {lbl.grade}%</text
+							>{fitLabelText(lbl.name, lbl.grade, false)}</text
 						>
 					{/if}
 				</g>
